@@ -11,17 +11,41 @@ import (
 )
 
 type Querier interface {
+	AddConversationMember(ctx context.Context, arg AddConversationMemberParams) error
+	CreateConversation(ctx context.Context, arg CreateConversationParams) (Conversation, error)
+	CreateFile(ctx context.Context, arg CreateFileParams) (File, error)
+	CreateMessage(ctx context.Context, arg CreateMessageParams) (Message, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (RefreshToken, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	DeleteFile(ctx context.Context, arg DeleteFileParams) error
 	DeleteUser(ctx context.Context, id uuid.UUID) error
+	EditMessage(ctx context.Context, arg EditMessageParams) (Message, error)
+	GetConversationByID(ctx context.Context, id uuid.UUID) (Conversation, error)
+	GetConversationMember(ctx context.Context, arg GetConversationMemberParams) (ConversationMember, error)
+	GetConversationMembers(ctx context.Context, conversationID uuid.UUID) ([]GetConversationMembersRow, error)
+	GetDirectConversation(ctx context.Context, arg GetDirectConversationParams) (Conversation, error)
+	GetFileByID(ctx context.Context, id uuid.UUID) (File, error)
+	GetFirstAdminOrMember(ctx context.Context, arg GetFirstAdminOrMemberParams) (GetFirstAdminOrMemberRow, error)
+	GetMessageByID(ctx context.Context, id uuid.UUID) (Message, error)
+	GetMessageReceipts(ctx context.Context, messageID uuid.UUID) ([]MessageReceipt, error)
+	GetMessagesByConversation(ctx context.Context, arg GetMessagesByConversationParams) ([]Message, error)
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	GetUserConversations(ctx context.Context, arg GetUserConversationsParams) ([]Conversation, error)
+	MarkMessageRead(ctx context.Context, arg MarkMessageReadParams) error
+	RemoveConversationMember(ctx context.Context, arg RemoveConversationMemberParams) error
 	RevokeAllUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
 	RevokeRefreshToken(ctx context.Context, id uuid.UUID) error
 	RotateRefreshToken(ctx context.Context, arg RotateRefreshTokenParams) error
+	SetMemberRole(ctx context.Context, arg SetMemberRoleParams) error
+	SoftDeleteMessage(ctx context.Context, arg SoftDeleteMessageParams) error
+	UpdateConversationName(ctx context.Context, arg UpdateConversationNameParams) (Conversation, error)
+	UpdateConversationTimestamp(ctx context.Context, id uuid.UUID) error
+	UpdateLastRead(ctx context.Context, arg UpdateLastReadParams) error
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
+	UpsertMessageReceipt(ctx context.Context, arg UpsertMessageReceiptParams) error
 	UserExistsByEmail(ctx context.Context, email string) (bool, error)
 }
 

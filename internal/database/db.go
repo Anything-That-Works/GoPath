@@ -24,14 +24,59 @@ func New(db DBTX) *Queries {
 func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	q := Queries{db: db}
 	var err error
+	if q.addConversationMemberStmt, err = db.PrepareContext(ctx, addConversationMember); err != nil {
+		return nil, fmt.Errorf("error preparing query AddConversationMember: %w", err)
+	}
+	if q.createConversationStmt, err = db.PrepareContext(ctx, createConversation); err != nil {
+		return nil, fmt.Errorf("error preparing query CreateConversation: %w", err)
+	}
+	if q.createFileStmt, err = db.PrepareContext(ctx, createFile); err != nil {
+		return nil, fmt.Errorf("error preparing query CreateFile: %w", err)
+	}
+	if q.createMessageStmt, err = db.PrepareContext(ctx, createMessage); err != nil {
+		return nil, fmt.Errorf("error preparing query CreateMessage: %w", err)
+	}
 	if q.createRefreshTokenStmt, err = db.PrepareContext(ctx, createRefreshToken); err != nil {
 		return nil, fmt.Errorf("error preparing query CreateRefreshToken: %w", err)
 	}
 	if q.createUserStmt, err = db.PrepareContext(ctx, createUser); err != nil {
 		return nil, fmt.Errorf("error preparing query CreateUser: %w", err)
 	}
+	if q.deleteFileStmt, err = db.PrepareContext(ctx, deleteFile); err != nil {
+		return nil, fmt.Errorf("error preparing query DeleteFile: %w", err)
+	}
 	if q.deleteUserStmt, err = db.PrepareContext(ctx, deleteUser); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteUser: %w", err)
+	}
+	if q.editMessageStmt, err = db.PrepareContext(ctx, editMessage); err != nil {
+		return nil, fmt.Errorf("error preparing query EditMessage: %w", err)
+	}
+	if q.getConversationByIDStmt, err = db.PrepareContext(ctx, getConversationByID); err != nil {
+		return nil, fmt.Errorf("error preparing query GetConversationByID: %w", err)
+	}
+	if q.getConversationMemberStmt, err = db.PrepareContext(ctx, getConversationMember); err != nil {
+		return nil, fmt.Errorf("error preparing query GetConversationMember: %w", err)
+	}
+	if q.getConversationMembersStmt, err = db.PrepareContext(ctx, getConversationMembers); err != nil {
+		return nil, fmt.Errorf("error preparing query GetConversationMembers: %w", err)
+	}
+	if q.getDirectConversationStmt, err = db.PrepareContext(ctx, getDirectConversation); err != nil {
+		return nil, fmt.Errorf("error preparing query GetDirectConversation: %w", err)
+	}
+	if q.getFileByIDStmt, err = db.PrepareContext(ctx, getFileByID); err != nil {
+		return nil, fmt.Errorf("error preparing query GetFileByID: %w", err)
+	}
+	if q.getFirstAdminOrMemberStmt, err = db.PrepareContext(ctx, getFirstAdminOrMember); err != nil {
+		return nil, fmt.Errorf("error preparing query GetFirstAdminOrMember: %w", err)
+	}
+	if q.getMessageByIDStmt, err = db.PrepareContext(ctx, getMessageByID); err != nil {
+		return nil, fmt.Errorf("error preparing query GetMessageByID: %w", err)
+	}
+	if q.getMessageReceiptsStmt, err = db.PrepareContext(ctx, getMessageReceipts); err != nil {
+		return nil, fmt.Errorf("error preparing query GetMessageReceipts: %w", err)
+	}
+	if q.getMessagesByConversationStmt, err = db.PrepareContext(ctx, getMessagesByConversation); err != nil {
+		return nil, fmt.Errorf("error preparing query GetMessagesByConversation: %w", err)
 	}
 	if q.getRefreshTokenByHashStmt, err = db.PrepareContext(ctx, getRefreshTokenByHash); err != nil {
 		return nil, fmt.Errorf("error preparing query GetRefreshTokenByHash: %w", err)
@@ -42,6 +87,15 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getUserByIDStmt, err = db.PrepareContext(ctx, getUserByID); err != nil {
 		return nil, fmt.Errorf("error preparing query GetUserByID: %w", err)
 	}
+	if q.getUserConversationsStmt, err = db.PrepareContext(ctx, getUserConversations); err != nil {
+		return nil, fmt.Errorf("error preparing query GetUserConversations: %w", err)
+	}
+	if q.markMessageReadStmt, err = db.PrepareContext(ctx, markMessageRead); err != nil {
+		return nil, fmt.Errorf("error preparing query MarkMessageRead: %w", err)
+	}
+	if q.removeConversationMemberStmt, err = db.PrepareContext(ctx, removeConversationMember); err != nil {
+		return nil, fmt.Errorf("error preparing query RemoveConversationMember: %w", err)
+	}
 	if q.revokeAllUserRefreshTokensStmt, err = db.PrepareContext(ctx, revokeAllUserRefreshTokens); err != nil {
 		return nil, fmt.Errorf("error preparing query RevokeAllUserRefreshTokens: %w", err)
 	}
@@ -51,11 +105,29 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.rotateRefreshTokenStmt, err = db.PrepareContext(ctx, rotateRefreshToken); err != nil {
 		return nil, fmt.Errorf("error preparing query RotateRefreshToken: %w", err)
 	}
+	if q.setMemberRoleStmt, err = db.PrepareContext(ctx, setMemberRole); err != nil {
+		return nil, fmt.Errorf("error preparing query SetMemberRole: %w", err)
+	}
+	if q.softDeleteMessageStmt, err = db.PrepareContext(ctx, softDeleteMessage); err != nil {
+		return nil, fmt.Errorf("error preparing query SoftDeleteMessage: %w", err)
+	}
+	if q.updateConversationNameStmt, err = db.PrepareContext(ctx, updateConversationName); err != nil {
+		return nil, fmt.Errorf("error preparing query UpdateConversationName: %w", err)
+	}
+	if q.updateConversationTimestampStmt, err = db.PrepareContext(ctx, updateConversationTimestamp); err != nil {
+		return nil, fmt.Errorf("error preparing query UpdateConversationTimestamp: %w", err)
+	}
+	if q.updateLastReadStmt, err = db.PrepareContext(ctx, updateLastRead); err != nil {
+		return nil, fmt.Errorf("error preparing query UpdateLastRead: %w", err)
+	}
 	if q.updateUserStmt, err = db.PrepareContext(ctx, updateUser); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateUser: %w", err)
 	}
 	if q.updateUserPasswordStmt, err = db.PrepareContext(ctx, updateUserPassword); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateUserPassword: %w", err)
+	}
+	if q.upsertMessageReceiptStmt, err = db.PrepareContext(ctx, upsertMessageReceipt); err != nil {
+		return nil, fmt.Errorf("error preparing query UpsertMessageReceipt: %w", err)
 	}
 	if q.userExistsByEmailStmt, err = db.PrepareContext(ctx, userExistsByEmail); err != nil {
 		return nil, fmt.Errorf("error preparing query UserExistsByEmail: %w", err)
@@ -65,6 +137,26 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 
 func (q *Queries) Close() error {
 	var err error
+	if q.addConversationMemberStmt != nil {
+		if cerr := q.addConversationMemberStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing addConversationMemberStmt: %w", cerr)
+		}
+	}
+	if q.createConversationStmt != nil {
+		if cerr := q.createConversationStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing createConversationStmt: %w", cerr)
+		}
+	}
+	if q.createFileStmt != nil {
+		if cerr := q.createFileStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing createFileStmt: %w", cerr)
+		}
+	}
+	if q.createMessageStmt != nil {
+		if cerr := q.createMessageStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing createMessageStmt: %w", cerr)
+		}
+	}
 	if q.createRefreshTokenStmt != nil {
 		if cerr := q.createRefreshTokenStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing createRefreshTokenStmt: %w", cerr)
@@ -75,9 +167,64 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing createUserStmt: %w", cerr)
 		}
 	}
+	if q.deleteFileStmt != nil {
+		if cerr := q.deleteFileStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing deleteFileStmt: %w", cerr)
+		}
+	}
 	if q.deleteUserStmt != nil {
 		if cerr := q.deleteUserStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing deleteUserStmt: %w", cerr)
+		}
+	}
+	if q.editMessageStmt != nil {
+		if cerr := q.editMessageStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing editMessageStmt: %w", cerr)
+		}
+	}
+	if q.getConversationByIDStmt != nil {
+		if cerr := q.getConversationByIDStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getConversationByIDStmt: %w", cerr)
+		}
+	}
+	if q.getConversationMemberStmt != nil {
+		if cerr := q.getConversationMemberStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getConversationMemberStmt: %w", cerr)
+		}
+	}
+	if q.getConversationMembersStmt != nil {
+		if cerr := q.getConversationMembersStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getConversationMembersStmt: %w", cerr)
+		}
+	}
+	if q.getDirectConversationStmt != nil {
+		if cerr := q.getDirectConversationStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getDirectConversationStmt: %w", cerr)
+		}
+	}
+	if q.getFileByIDStmt != nil {
+		if cerr := q.getFileByIDStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getFileByIDStmt: %w", cerr)
+		}
+	}
+	if q.getFirstAdminOrMemberStmt != nil {
+		if cerr := q.getFirstAdminOrMemberStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getFirstAdminOrMemberStmt: %w", cerr)
+		}
+	}
+	if q.getMessageByIDStmt != nil {
+		if cerr := q.getMessageByIDStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getMessageByIDStmt: %w", cerr)
+		}
+	}
+	if q.getMessageReceiptsStmt != nil {
+		if cerr := q.getMessageReceiptsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getMessageReceiptsStmt: %w", cerr)
+		}
+	}
+	if q.getMessagesByConversationStmt != nil {
+		if cerr := q.getMessagesByConversationStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getMessagesByConversationStmt: %w", cerr)
 		}
 	}
 	if q.getRefreshTokenByHashStmt != nil {
@@ -95,6 +242,21 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getUserByIDStmt: %w", cerr)
 		}
 	}
+	if q.getUserConversationsStmt != nil {
+		if cerr := q.getUserConversationsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getUserConversationsStmt: %w", cerr)
+		}
+	}
+	if q.markMessageReadStmt != nil {
+		if cerr := q.markMessageReadStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing markMessageReadStmt: %w", cerr)
+		}
+	}
+	if q.removeConversationMemberStmt != nil {
+		if cerr := q.removeConversationMemberStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing removeConversationMemberStmt: %w", cerr)
+		}
+	}
 	if q.revokeAllUserRefreshTokensStmt != nil {
 		if cerr := q.revokeAllUserRefreshTokensStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing revokeAllUserRefreshTokensStmt: %w", cerr)
@@ -110,6 +272,31 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing rotateRefreshTokenStmt: %w", cerr)
 		}
 	}
+	if q.setMemberRoleStmt != nil {
+		if cerr := q.setMemberRoleStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing setMemberRoleStmt: %w", cerr)
+		}
+	}
+	if q.softDeleteMessageStmt != nil {
+		if cerr := q.softDeleteMessageStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing softDeleteMessageStmt: %w", cerr)
+		}
+	}
+	if q.updateConversationNameStmt != nil {
+		if cerr := q.updateConversationNameStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing updateConversationNameStmt: %w", cerr)
+		}
+	}
+	if q.updateConversationTimestampStmt != nil {
+		if cerr := q.updateConversationTimestampStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing updateConversationTimestampStmt: %w", cerr)
+		}
+	}
+	if q.updateLastReadStmt != nil {
+		if cerr := q.updateLastReadStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing updateLastReadStmt: %w", cerr)
+		}
+	}
 	if q.updateUserStmt != nil {
 		if cerr := q.updateUserStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing updateUserStmt: %w", cerr)
@@ -118,6 +305,11 @@ func (q *Queries) Close() error {
 	if q.updateUserPasswordStmt != nil {
 		if cerr := q.updateUserPasswordStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing updateUserPasswordStmt: %w", cerr)
+		}
+	}
+	if q.upsertMessageReceiptStmt != nil {
+		if cerr := q.upsertMessageReceiptStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing upsertMessageReceiptStmt: %w", cerr)
 		}
 	}
 	if q.userExistsByEmailStmt != nil {
@@ -162,37 +354,85 @@ func (q *Queries) queryRow(ctx context.Context, stmt *sql.Stmt, query string, ar
 }
 
 type Queries struct {
-	db                             DBTX
-	tx                             *sql.Tx
-	createRefreshTokenStmt         *sql.Stmt
-	createUserStmt                 *sql.Stmt
-	deleteUserStmt                 *sql.Stmt
-	getRefreshTokenByHashStmt      *sql.Stmt
-	getUserByEmailStmt             *sql.Stmt
-	getUserByIDStmt                *sql.Stmt
-	revokeAllUserRefreshTokensStmt *sql.Stmt
-	revokeRefreshTokenStmt         *sql.Stmt
-	rotateRefreshTokenStmt         *sql.Stmt
-	updateUserStmt                 *sql.Stmt
-	updateUserPasswordStmt         *sql.Stmt
-	userExistsByEmailStmt          *sql.Stmt
+	db                              DBTX
+	tx                              *sql.Tx
+	addConversationMemberStmt       *sql.Stmt
+	createConversationStmt          *sql.Stmt
+	createFileStmt                  *sql.Stmt
+	createMessageStmt               *sql.Stmt
+	createRefreshTokenStmt          *sql.Stmt
+	createUserStmt                  *sql.Stmt
+	deleteFileStmt                  *sql.Stmt
+	deleteUserStmt                  *sql.Stmt
+	editMessageStmt                 *sql.Stmt
+	getConversationByIDStmt         *sql.Stmt
+	getConversationMemberStmt       *sql.Stmt
+	getConversationMembersStmt      *sql.Stmt
+	getDirectConversationStmt       *sql.Stmt
+	getFileByIDStmt                 *sql.Stmt
+	getFirstAdminOrMemberStmt       *sql.Stmt
+	getMessageByIDStmt              *sql.Stmt
+	getMessageReceiptsStmt          *sql.Stmt
+	getMessagesByConversationStmt   *sql.Stmt
+	getRefreshTokenByHashStmt       *sql.Stmt
+	getUserByEmailStmt              *sql.Stmt
+	getUserByIDStmt                 *sql.Stmt
+	getUserConversationsStmt        *sql.Stmt
+	markMessageReadStmt             *sql.Stmt
+	removeConversationMemberStmt    *sql.Stmt
+	revokeAllUserRefreshTokensStmt  *sql.Stmt
+	revokeRefreshTokenStmt          *sql.Stmt
+	rotateRefreshTokenStmt          *sql.Stmt
+	setMemberRoleStmt               *sql.Stmt
+	softDeleteMessageStmt           *sql.Stmt
+	updateConversationNameStmt      *sql.Stmt
+	updateConversationTimestampStmt *sql.Stmt
+	updateLastReadStmt              *sql.Stmt
+	updateUserStmt                  *sql.Stmt
+	updateUserPasswordStmt          *sql.Stmt
+	upsertMessageReceiptStmt        *sql.Stmt
+	userExistsByEmailStmt           *sql.Stmt
 }
 
 func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 	return &Queries{
-		db:                             tx,
-		tx:                             tx,
-		createRefreshTokenStmt:         q.createRefreshTokenStmt,
-		createUserStmt:                 q.createUserStmt,
-		deleteUserStmt:                 q.deleteUserStmt,
-		getRefreshTokenByHashStmt:      q.getRefreshTokenByHashStmt,
-		getUserByEmailStmt:             q.getUserByEmailStmt,
-		getUserByIDStmt:                q.getUserByIDStmt,
-		revokeAllUserRefreshTokensStmt: q.revokeAllUserRefreshTokensStmt,
-		revokeRefreshTokenStmt:         q.revokeRefreshTokenStmt,
-		rotateRefreshTokenStmt:         q.rotateRefreshTokenStmt,
-		updateUserStmt:                 q.updateUserStmt,
-		updateUserPasswordStmt:         q.updateUserPasswordStmt,
-		userExistsByEmailStmt:          q.userExistsByEmailStmt,
+		db:                              tx,
+		tx:                              tx,
+		addConversationMemberStmt:       q.addConversationMemberStmt,
+		createConversationStmt:          q.createConversationStmt,
+		createFileStmt:                  q.createFileStmt,
+		createMessageStmt:               q.createMessageStmt,
+		createRefreshTokenStmt:          q.createRefreshTokenStmt,
+		createUserStmt:                  q.createUserStmt,
+		deleteFileStmt:                  q.deleteFileStmt,
+		deleteUserStmt:                  q.deleteUserStmt,
+		editMessageStmt:                 q.editMessageStmt,
+		getConversationByIDStmt:         q.getConversationByIDStmt,
+		getConversationMemberStmt:       q.getConversationMemberStmt,
+		getConversationMembersStmt:      q.getConversationMembersStmt,
+		getDirectConversationStmt:       q.getDirectConversationStmt,
+		getFileByIDStmt:                 q.getFileByIDStmt,
+		getFirstAdminOrMemberStmt:       q.getFirstAdminOrMemberStmt,
+		getMessageByIDStmt:              q.getMessageByIDStmt,
+		getMessageReceiptsStmt:          q.getMessageReceiptsStmt,
+		getMessagesByConversationStmt:   q.getMessagesByConversationStmt,
+		getRefreshTokenByHashStmt:       q.getRefreshTokenByHashStmt,
+		getUserByEmailStmt:              q.getUserByEmailStmt,
+		getUserByIDStmt:                 q.getUserByIDStmt,
+		getUserConversationsStmt:        q.getUserConversationsStmt,
+		markMessageReadStmt:             q.markMessageReadStmt,
+		removeConversationMemberStmt:    q.removeConversationMemberStmt,
+		revokeAllUserRefreshTokensStmt:  q.revokeAllUserRefreshTokensStmt,
+		revokeRefreshTokenStmt:          q.revokeRefreshTokenStmt,
+		rotateRefreshTokenStmt:          q.rotateRefreshTokenStmt,
+		setMemberRoleStmt:               q.setMemberRoleStmt,
+		softDeleteMessageStmt:           q.softDeleteMessageStmt,
+		updateConversationNameStmt:      q.updateConversationNameStmt,
+		updateConversationTimestampStmt: q.updateConversationTimestampStmt,
+		updateLastReadStmt:              q.updateLastReadStmt,
+		updateUserStmt:                  q.updateUserStmt,
+		updateUserPasswordStmt:          q.updateUserPasswordStmt,
+		upsertMessageReceiptStmt:        q.upsertMessageReceiptStmt,
+		userExistsByEmailStmt:           q.userExistsByEmailStmt,
 	}
 }

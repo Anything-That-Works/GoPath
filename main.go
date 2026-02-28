@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/Anything-That-Works/GoPath/internal/database"
+	"github.com/Anything-That-Works/GoPath/internal/storage"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
@@ -18,6 +19,7 @@ import (
 type apiConfig struct {
 	DB           *database.Queries
 	JWTSecretKey []byte
+	Storage      storage.FileStorage
 }
 
 func main() {
@@ -51,6 +53,7 @@ func main() {
 	apiConfig := apiConfig{
 		DB:           database.New(con),
 		JWTSecretKey: []byte(jwtSecretKey),
+		Storage:      storage.NewLocalStorage("./uploads", "http://localhost:"+portString),
 	}
 
 	router := chi.NewRouter()
@@ -76,6 +79,15 @@ func main() {
 	v1Router.Post("/user/refresh", apiConfig.handlerRefreshToken)
 	v1Router.Post("/user/logout", apiConfig.middlewareAuth(apiConfig.handlerLogout))
 
+	v1Router.Post("/conversations/create", apiConfig.middlewareAuth(apiConfig.handlerCreateConversation))
+	v1Router.Post("/conversations", apiConfig.middlewareAuth(apiConfig.handlerGetConversations))
+	v1Router.Post("/conversations/members", apiConfig.middlewareAuth(apiConfig.handlerGetConversationMembers))
+	v1Router.Post("/conversations/members/add", apiConfig.middlewareAuth(apiConfig.handlerAddMember))
+	v1Router.Post("/conversations/members/remove", apiConfig.middlewareAuth(apiConfig.handlerRemoveMember))
+	v1Router.Post("/conversations/members/role", apiConfig.middlewareAuth(apiConfig.handlerSetRole))
+	v1Router.Post("/conversations/transfer-ownership", apiConfig.middlewareAuth(apiConfig.handlerTransferOwnership))
+	v1Router.Put("/conversations/name", apiConfig.middlewareAuth(apiConfig.handlerRenameGroup))
+	v1Router.Post("/conversations/messages", apiConfig.middlewareAuth(apiConfig.handlerGetMessages))
 	router.Mount("/v1", v1Router)
 	srv := &http.Server{
 		Handler: router,

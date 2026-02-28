@@ -1,0 +1,13 @@
+version: "2"
+sql:
+  - schema: "sql/schema"
+    queries: "sql/queries"
+    engine: "postgresql"
+    gen:
+      go:
+        out: "internal/database"
+        package: "database"       # Go package name
+        emit_interface: true      # optional, for easier mocking
+        emit_json_tags: true      # include JSON tags in structs
+        emit_prepared_queries: true # optional, can improve performance
+        emit_db_tags: true        # include db tags for struct mapping

@@ -6,11 +6,147 @@ package database
 
 import (
 	"database/sql"
+	"database/sql/driver"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 )
+
+type MemberRole string
+
+const (
+	MemberRoleMember     MemberRole = "member"
+	MemberRoleAdmin      MemberRole = "admin"
+	MemberRoleSuperAdmin MemberRole = "super_admin"
+)
+
+func (e *MemberRole) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = MemberRole(s)
+	case string:
+		*e = MemberRole(s)
+	default:
+		return fmt.Errorf("unsupported scan type for MemberRole: %T", src)
+	}
+	return nil
+}
+
+type NullMemberRole struct {
+	MemberRole MemberRole `json:"member_role"`
+	Valid      bool       `json:"valid"` // Valid is true if MemberRole is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullMemberRole) Scan(value interface{}) error {
+	if value == nil {
+		ns.MemberRole, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.MemberRole.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullMemberRole) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.MemberRole), nil
+}
+
+type MessageStatus string
+
+const (
+	MessageStatusSent      MessageStatus = "sent"
+	MessageStatusDelivered MessageStatus = "delivered"
+	MessageStatusRead      MessageStatus = "read"
+)
+
+func (e *MessageStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = MessageStatus(s)
+	case string:
+		*e = MessageStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for MessageStatus: %T", src)
+	}
+	return nil
+}
+
+type NullMessageStatus struct {
+	MessageStatus MessageStatus `json:"message_status"`
+	Valid         bool          `json:"valid"` // Valid is true if MessageStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullMessageStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.MessageStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.MessageStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullMessageStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.MessageStatus), nil
+}
+
+type Conversation struct {
+	ID        uuid.UUID      `db:"id" json:"id"`
+	IsGroup   bool           `db:"is_group" json:"is_group"`
+	Name      sql.NullString `db:"name" json:"name"`
+	CreatedBy uuid.UUID      `db:"created_by" json:"created_by"`
+	CreatedAt time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt time.Time      `db:"updated_at" json:"updated_at"`
+}
+
+type ConversationMember struct {
+	ConversationID uuid.UUID    `db:"conversation_id" json:"conversation_id"`
+	UserID         uuid.UUID    `db:"user_id" json:"user_id"`
+	Role           MemberRole   `db:"role" json:"role"`
+	JoinedAt       time.Time    `db:"joined_at" json:"joined_at"`
+	LastReadAt     sql.NullTime `db:"last_read_at" json:"last_read_at"`
+}
+
+type File struct {
+	ID         uuid.UUID `db:"id" json:"id"`
+	UploaderID uuid.UUID `db:"uploader_id" json:"uploader_id"`
+	Name       string    `db:"name" json:"name"`
+	MimeType   string    `db:"mime_type" json:"mime_type"`
+	Size       int64     `db:"size" json:"size"`
+	Path       string    `db:"path" json:"path"`
+	CreatedAt  time.Time `db:"created_at" json:"created_at"`
+}
+
+type Message struct {
+	ID             uuid.UUID      `db:"id" json:"id"`
+	ConversationID uuid.UUID      `db:"conversation_id" json:"conversation_id"`
+	SenderID       uuid.UUID      `db:"sender_id" json:"sender_id"`
+	Content        sql.NullString `db:"content" json:"content"`
+	FileID         uuid.NullUUID  `db:"file_id" json:"file_id"`
+	ReplyToID      uuid.NullUUID  `db:"reply_to_id" json:"reply_to_id"`
+	Status         MessageStatus  `db:"status" json:"status"`
+	IsEdited       bool           `db:"is_edited" json:"is_edited"`
+	DeletedAt      sql.NullTime   `db:"deleted_at" json:"deleted_at"`
+	CreatedAt      time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt      time.Time      `db:"updated_at" json:"updated_at"`
+}
+
+type MessageReceipt struct {
+	MessageID   uuid.UUID    `db:"message_id" json:"message_id"`
+	UserID      uuid.UUID    `db:"user_id" json:"user_id"`
+	DeliveredAt sql.NullTime `db:"delivered_at" json:"delivered_at"`
+	ReadAt      sql.NullTime `db:"read_at" json:"read_at"`
+}
 
 type RefreshToken struct {
 	ID                uuid.UUID      `db:"id" json:"id"`
