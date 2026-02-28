@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -22,6 +23,7 @@ func (apiConfig *apiConfig) handlerRefreshToken(w http.ResponseWriter, r *http.R
 	decoder := json.NewDecoder(r.Body)
 	params := parameters{}
 	if err := decoder.Decode(&params); err != nil {
+		log.Println("Decode error:", err)
 		respondWithJSON(w, 400, model.APIResponse{Success: false, Message: "Invalid request payload"})
 		return
 	}

@@ -4,17 +4,14 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+
+	"github.com/Anything-That-Works/GoPath/internal/model"
 )
 
 func respondWithError(w http.ResponseWriter, code int, msg string) {
-	if code > 499 {
-		log.Println("Responding with 5XX error:", msg)
-	}
-	type errorResponse struct {
-		Error string `json:"error"`
-	}
-	respondWithJSON(w, code, errorResponse{
-		Error: msg,
+	respondWithJSON(w, code, model.APIResponse{
+		Success: false,
+		Message: msg,
 	})
 }
 
@@ -22,7 +19,7 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	dat, err := json.Marshal(payload)
 
 	if err != nil {
-		log.Printf("Failed to marshel JSON response %v", err)
+		log.Printf("Failed to marshal JSON response %v", err)
 		w.WriteHeader(500)
 		return
 	}

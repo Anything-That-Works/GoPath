@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 
@@ -44,6 +45,7 @@ func (apiConfig *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Req
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(params.Password), bcrypt.DefaultCost)
 	if err != nil {
+		log.Println("GenerateFromPassword error:", err)
 		payload := model.APIResponse{
 			Success: false,
 			Message: "Failed to process password",
@@ -63,6 +65,7 @@ func (apiConfig *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Req
 	})
 
 	if err != nil {
+		log.Println("CreateUser error:", err)
 		payload := model.APIResponse{
 			Success: false,
 			Message: "Failed to create user",
@@ -74,6 +77,7 @@ func (apiConfig *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Req
 
 	tr, tokenHash, err := auth.GenerateToken(user.ID, apiConfig.JWTSecretKey)
 	if err != nil {
+		log.Println("GenerateToken error:", err)
 		payload := model.APIResponse{
 			Success: false,
 			Message: "Failed to generate token",
@@ -82,15 +86,17 @@ func (apiConfig *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Req
 		respondWithJSON(w, 500, payload)
 		return
 	}
+	ip := getIPAddress(r)
 
 	_, err = apiConfig.DB.CreateRefreshToken(r.Context(), database.CreateRefreshTokenParams{
 		UserID:    user.ID,
 		TokenHash: tokenHash,
 		ExpiresAt: tr.RefreshToken.Expires,
 		UserAgent: sql.NullString{String: r.UserAgent(), Valid: true},
-		IpAddress: getIPAddress(r),
+		IpAddress: ip,
 	})
 	if err != nil {
+		log.Println("CreateRefreshToken error:", err)
 		payload := model.APIResponse{
 			Success: false,
 			Message: "Failed to store refresh token",
