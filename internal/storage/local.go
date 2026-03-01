@@ -17,9 +17,8 @@ type LocalStorage struct {
 }
 
 func NewLocalStorage(basePath string, baseURL string) *LocalStorage {
-	err := os.MkdirAll(basePath, os.ModePerm)
-	if err != nil {
-		panic(fmt.Sprintf("Failed to create storage directory: %v", err))
+	if err := os.MkdirAll(basePath, os.ModePerm); err != nil {
+		fmt.Println("Error creating directory:", err)
 	}
 	return &LocalStorage{BasePath: basePath, BaseURL: baseURL}
 }
@@ -31,11 +30,11 @@ func (s *LocalStorage) Save(file multipart.File, filename string, mimeType strin
 
 	dest, err := os.Create(destPath)
 	if err != nil {
-		return "os.Create Error: ", err
+		return "", err
 	}
 	defer func() {
-		if closeErr := dest.Close(); closeErr != nil {
-			err = closeErr
+		if err := dest.Close(); err != nil {
+			fmt.Println("Error closing file:", err)
 		}
 	}()
 
@@ -51,5 +50,5 @@ func (s *LocalStorage) Delete(path string) error {
 }
 
 func (s *LocalStorage) URL(path string) string {
-	return fmt.Sprintf("%s/files/%s", s.BaseURL, path)
+	return fmt.Sprintf("%s/v1/files/%s", s.BaseURL, path)
 }

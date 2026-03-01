@@ -88,6 +88,9 @@ func main() {
 	v1Router.Post("/conversations/transfer-ownership", apiConfig.middlewareAuth(apiConfig.handlerTransferOwnership))
 	v1Router.Put("/conversations/name", apiConfig.middlewareAuth(apiConfig.handlerRenameGroup))
 	v1Router.Post("/conversations/messages", apiConfig.middlewareAuth(apiConfig.handlerGetMessages))
+
+	v1Router.Post("/files", apiConfig.middlewareAuth(apiConfig.handlerUploadFile))
+	v1Router.Get("/files/{filename}", apiConfig.middlewareAuth(apiConfig.handlerServeFile))
 	router.Mount("/v1", v1Router)
 	srv := &http.Server{
 		Handler: router,
