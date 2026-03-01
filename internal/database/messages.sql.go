@@ -54,17 +54,18 @@ func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (M
 const editMessage = `-- name: EditMessage :one
 UPDATE messages
 SET content = $2, is_edited = TRUE, updated_at = NOW()
-WHERE id = $1 AND sender_id = $2 AND deleted_at IS NULL
+WHERE id = $1 AND sender_id = $3 AND deleted_at IS NULL
 RETURNING id, conversation_id, sender_id, content, file_id, reply_to_id, status, is_edited, deleted_at, created_at, updated_at
 `
 
 type EditMessageParams struct {
-	ID      uuid.UUID      `db:"id" json:"id"`
-	Content sql.NullString `db:"content" json:"content"`
+	ID       uuid.UUID      `db:"id" json:"id"`
+	Content  sql.NullString `db:"content" json:"content"`
+	SenderID uuid.UUID      `db:"sender_id" json:"sender_id"`
 }
 
 func (q *Queries) EditMessage(ctx context.Context, arg EditMessageParams) (Message, error) {
-	row := q.queryRow(ctx, q.editMessageStmt, editMessage, arg.ID, arg.Content)
+	row := q.queryRow(ctx, q.editMessageStmt, editMessage, arg.ID, arg.Content, arg.SenderID)
 	var i Message
 	err := row.Scan(
 		&i.ID,

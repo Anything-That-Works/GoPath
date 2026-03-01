@@ -15,7 +15,7 @@ SELECT * FROM messages WHERE id = $1;
 -- name: EditMessage :one
 UPDATE messages
 SET content = $2, is_edited = TRUE, updated_at = NOW()
-WHERE id = $1 AND sender_id = $2 AND deleted_at IS NULL
+WHERE id = $1 AND sender_id = $3 AND deleted_at IS NULL
 RETURNING *;
 
 -- name: SoftDeleteMessage :exec

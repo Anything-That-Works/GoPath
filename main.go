@@ -9,6 +9,7 @@ import (
 
 	"github.com/Anything-That-Works/GoPath/internal/database"
 	"github.com/Anything-That-Works/GoPath/internal/storage"
+	"github.com/Anything-That-Works/GoPath/internal/ws"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
@@ -56,6 +57,11 @@ func main() {
 		Storage:      storage.NewLocalStorage("./uploads", "http://localhost:"+portString),
 	}
 
+	hub := ws.NewHub()
+	go hub.Run()
+
+	msgHandler := ws.NewMessageHandler(hub, apiConfig.DB, apiConfig.Storage)
+
 	router := chi.NewRouter()
 
 	router.Use(cors.Handler(cors.Options{
@@ -91,6 +97,9 @@ func main() {
 
 	v1Router.Post("/files", apiConfig.middlewareAuth(apiConfig.handlerUploadFile))
 	v1Router.Get("/files/{filename}", apiConfig.middlewareAuth(apiConfig.handlerServeFile))
+
+	v1Router.Get("/ws", apiConfig.handlerWebSocket(hub, msgHandler))
+
 	router.Mount("/v1", v1Router)
 	srv := &http.Server{
 		Handler: router,
