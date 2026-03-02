@@ -21,6 +21,7 @@ type apiConfig struct {
 	DB           *database.Queries
 	JWTSecretKey []byte
 	Storage      storage.FileStorage
+	Hub          *ws.Hub
 }
 
 func main() {
@@ -51,14 +52,15 @@ func main() {
 		log.Fatal("Cannot connect to database: ", err)
 	}
 
+	hub := ws.NewHub()
+	go hub.Run()
+
 	apiConfig := apiConfig{
 		DB:           database.New(con),
 		JWTSecretKey: []byte(jwtSecretKey),
 		Storage:      storage.NewLocalStorage("./uploads", "http://localhost:"+portString),
+		Hub:          hub,
 	}
-
-	hub := ws.NewHub()
-	go hub.Run()
 
 	msgHandler := ws.NewMessageHandler(hub, apiConfig.DB, apiConfig.Storage)
 
@@ -94,6 +96,8 @@ func main() {
 	v1Router.Post("/conversations/transfer-ownership", apiConfig.middlewareAuth(apiConfig.handlerTransferOwnership))
 	v1Router.Put("/conversations/name", apiConfig.middlewareAuth(apiConfig.handlerRenameGroup))
 	v1Router.Post("/conversations/messages", apiConfig.middlewareAuth(apiConfig.handlerGetMessages))
+	v1Router.Post("/conversations/messages/search", apiConfig.middlewareAuth(apiConfig.handlerSearchMessages))
+	v1Router.Post("/conversations/online", apiConfig.middlewareAuth(apiConfig.handlerGetOnlineMembers))
 
 	v1Router.Post("/files", apiConfig.middlewareAuth(apiConfig.handlerUploadFile))
 	v1Router.Get("/files/{filename}", apiConfig.middlewareAuth(apiConfig.handlerServeFile))

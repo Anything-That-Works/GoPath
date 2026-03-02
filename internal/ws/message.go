@@ -15,6 +15,8 @@ const (
 	TypeAck        MessageType = "ack"
 	TypeDelivered  MessageType = "delivered"
 	TypeError      MessageType = "error"
+	TypeOnline     MessageType = "online"
+	TypeOffline    MessageType = "offline"
 )
 
 // incoming from client

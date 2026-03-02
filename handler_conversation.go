@@ -628,3 +628,123 @@ func (apiConfig *apiConfig) handlerGetMessages(w http.ResponseWriter, r *http.Re
 		},
 	})
 }
+
+func (apiConfig *apiConfig) handlerSearchMessages(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value(contextKeyUserID).(uuid.UUID)
+	if !ok {
+		respondWithJSON(w, 401, model.APIResponse{Success: false, Message: "Unauthorized"})
+		return
+	}
+
+	type parameters struct {
+		ConversationID uuid.UUID `json:"conversation_id"`
+		Query          string    `json:"query"`
+		Limit          int32     `json:"limit"`
+		Page           int32     `json:"page"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	if err := decoder.Decode(&params); err != nil {
+		respondWithJSON(w, 400, model.APIResponse{Success: false, Message: "Invalid request payload"})
+		return
+	}
+
+	if params.ConversationID == uuid.Nil {
+		respondWithJSON(w, 400, model.APIResponse{Success: false, Message: "conversation_id required"})
+		return
+	}
+
+	if params.Query == "" {
+		respondWithJSON(w, 400, model.APIResponse{Success: false, Message: "query required"})
+		return
+	}
+
+	if params.Limit == 0 {
+		params.Limit = 20
+	}
+	if params.Page == 0 {
+		params.Page = 1
+	}
+
+	offset := (params.Page - 1) * params.Limit
+
+	// verify membership
+	_, err := apiConfig.DB.GetConversationMember(r.Context(), database.GetConversationMemberParams{
+		ConversationID: params.ConversationID,
+		UserID:         userID,
+	})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			respondWithJSON(w, 403, model.APIResponse{Success: false, Message: "Not a member of this conversation"})
+			return
+		}
+		respondWithJSON(w, 500, model.APIResponse{Success: false, Message: "Failed to verify membership"})
+		return
+	}
+
+	messages, err := apiConfig.DB.SearchMessages(r.Context(), database.SearchMessagesParams{
+		ConversationID: params.ConversationID,
+		Column2:        sql.NullString{String: params.Query, Valid: true},
+		Limit:          params.Limit,
+		Offset:         offset,
+	})
+	if err != nil {
+		respondWithJSON(w, 500, model.APIResponse{Success: false, Message: "Failed to search messages"})
+		return
+	}
+
+	respondWithJSON(w, 200, model.APIResponse{
+		Success: true,
+		Message: "Search results fetched successfully",
+		Data: map[string]interface{}{
+			"messages": messages,
+			"query":    params.Query,
+			"limit":    params.Limit,
+			"page":     params.Page,
+		},
+	})
+}
+
+func (apiConfig *apiConfig) handlerGetOnlineMembers(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value(contextKeyUserID).(uuid.UUID)
+	if !ok {
+		respondWithJSON(w, 401, model.APIResponse{Success: false, Message: "Unauthorized"})
+		return
+	}
+
+	type parameters struct {
+		ConversationID uuid.UUID `json:"conversation_id"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	if err := decoder.Decode(&params); err != nil {
+		respondWithJSON(w, 400, model.APIResponse{Success: false, Message: "Invalid request payload"})
+		return
+	}
+
+	// verify membership
+	_, err := apiConfig.DB.GetConversationMember(r.Context(), database.GetConversationMemberParams{
+		ConversationID: params.ConversationID,
+		UserID:         userID,
+	})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			respondWithJSON(w, 403, model.APIResponse{Success: false, Message: "Not a member of this conversation"})
+			return
+		}
+		respondWithJSON(w, 500, model.APIResponse{Success: false, Message: "Failed to verify membership"})
+		return
+	}
+
+	onlineUsers := apiConfig.Hub.GetOnlineUsers(params.ConversationID)
+
+	respondWithJSON(w, 200, model.APIResponse{
+		Success: true,
+		Message: "Online members fetched successfully",
+		Data: map[string]interface{}{
+			"online_users": onlineUsers,
+		},
+	})
+}

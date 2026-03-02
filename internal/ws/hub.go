@@ -34,16 +34,27 @@ func (h *Hub) Run() {
 			if _, ok := h.Rooms[client.ConversationID][client.UserID]; !ok {
 				h.Rooms[client.ConversationID][client.UserID] = make(map[*Client]bool)
 			}
+			isFirstConnection := len(h.Rooms[client.ConversationID][client.UserID]) == 0
 			h.Rooms[client.ConversationID][client.UserID][client] = true
 			h.mu.Unlock()
 
+			if isFirstConnection {
+				go h.BroadcastToConversation(client.ConversationID, client.UserID, OutgoingMessage{
+					Type:           TypeOnline,
+					ConversationID: &client.ConversationID,
+					SenderID:       &client.UserID,
+				})
+			}
+
 		case client := <-h.Unregister:
 			h.mu.Lock()
+			isLastConnection := false
 			if users, ok := h.Rooms[client.ConversationID]; ok {
 				if clients, ok := users[client.UserID]; ok {
 					delete(clients, client)
-					close(client.Send)
+					// check before closing
 					if len(clients) == 0 {
+						isLastConnection = true
 						delete(users, client.UserID)
 					}
 				}
@@ -51,7 +62,25 @@ func (h *Hub) Run() {
 					delete(h.Rooms, client.ConversationID)
 				}
 			}
+			// safe to close after removing from map
+			select {
+			case _, ok := <-client.Send:
+				if ok {
+					close(client.Send)
+				}
+			default:
+				close(client.Send)
+			}
 			h.mu.Unlock()
+
+			// only broadcast offline if all devices disconnected
+			if isLastConnection {
+				h.BroadcastToConversation(client.ConversationID, client.UserID, OutgoingMessage{
+					Type:           TypeOffline,
+					ConversationID: &client.ConversationID,
+					SenderID:       &client.UserID,
+				})
+			}
 		}
 	}
 }
@@ -118,4 +147,18 @@ func (h *Hub) IsUserOnline(conversationID uuid.UUID, userID uuid.UUID) bool {
 		}
 	}
 	return false
+}
+
+// GetOnlineUsers returns all online user IDs in a conversation
+func (h *Hub) GetOnlineUsers(conversationID uuid.UUID) []uuid.UUID {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	onlineUsers := []uuid.UUID{}
+	if users, ok := h.Rooms[conversationID]; ok {
+		for userID := range users {
+			onlineUsers = append(onlineUsers, userID)
+		}
+	}
+	return onlineUsers
 }

@@ -203,6 +203,62 @@ func (q *Queries) MarkMessageRead(ctx context.Context, arg MarkMessageReadParams
 	return err
 }
 
+const searchMessages = `-- name: SearchMessages :many
+SELECT id, conversation_id, sender_id, content, file_id, reply_to_id, status, is_edited, deleted_at, created_at, updated_at FROM messages
+WHERE conversation_id = $1
+AND deleted_at IS NULL
+AND content ILIKE '%' || $2 || '%'
+ORDER BY created_at DESC
+LIMIT $3 OFFSET $4
+`
+
+type SearchMessagesParams struct {
+	ConversationID uuid.UUID      `db:"conversation_id" json:"conversation_id"`
+	Column2        sql.NullString `db:"column_2" json:"column_2"`
+	Limit          int32          `db:"limit" json:"limit"`
+	Offset         int32          `db:"offset" json:"offset"`
+}
+
+func (q *Queries) SearchMessages(ctx context.Context, arg SearchMessagesParams) ([]Message, error) {
+	rows, err := q.query(ctx, q.searchMessagesStmt, searchMessages,
+		arg.ConversationID,
+		arg.Column2,
+		arg.Limit,
+		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Message
+	for rows.Next() {
+		var i Message
+		if err := rows.Scan(
+			&i.ID,
+			&i.ConversationID,
+			&i.SenderID,
+			&i.Content,
+			&i.FileID,
+			&i.ReplyToID,
+			&i.Status,
+			&i.IsEdited,
+			&i.DeletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const softDeleteMessage = `-- name: SoftDeleteMessage :exec
 UPDATE messages
 SET deleted_at = NOW()

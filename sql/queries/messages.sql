@@ -37,3 +37,11 @@ SET read_at = NOW();
 
 -- name: GetMessageReceipts :many
 SELECT * FROM message_receipts WHERE message_id = $1;
+
+-- name: SearchMessages :many
+SELECT * FROM messages
+WHERE conversation_id = $1
+AND deleted_at IS NULL
+AND content ILIKE '%' || $2 || '%'
+ORDER BY created_at DESC
+LIMIT $3 OFFSET $4;

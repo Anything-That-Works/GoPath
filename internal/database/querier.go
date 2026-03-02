@@ -38,6 +38,7 @@ type Querier interface {
 	RevokeAllUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
 	RevokeRefreshToken(ctx context.Context, id uuid.UUID) error
 	RotateRefreshToken(ctx context.Context, arg RotateRefreshTokenParams) error
+	SearchMessages(ctx context.Context, arg SearchMessagesParams) ([]Message, error)
 	SetMemberRole(ctx context.Context, arg SetMemberRoleParams) error
 	SoftDeleteMessage(ctx context.Context, arg SoftDeleteMessageParams) error
 	UpdateConversationName(ctx context.Context, arg UpdateConversationNameParams) (Conversation, error)

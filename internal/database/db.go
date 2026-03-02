@@ -105,6 +105,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.rotateRefreshTokenStmt, err = db.PrepareContext(ctx, rotateRefreshToken); err != nil {
 		return nil, fmt.Errorf("error preparing query RotateRefreshToken: %w", err)
 	}
+	if q.searchMessagesStmt, err = db.PrepareContext(ctx, searchMessages); err != nil {
+		return nil, fmt.Errorf("error preparing query SearchMessages: %w", err)
+	}
 	if q.setMemberRoleStmt, err = db.PrepareContext(ctx, setMemberRole); err != nil {
 		return nil, fmt.Errorf("error preparing query SetMemberRole: %w", err)
 	}
@@ -272,6 +275,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing rotateRefreshTokenStmt: %w", cerr)
 		}
 	}
+	if q.searchMessagesStmt != nil {
+		if cerr := q.searchMessagesStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing searchMessagesStmt: %w", cerr)
+		}
+	}
 	if q.setMemberRoleStmt != nil {
 		if cerr := q.setMemberRoleStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing setMemberRoleStmt: %w", cerr)
@@ -383,6 +391,7 @@ type Queries struct {
 	revokeAllUserRefreshTokensStmt  *sql.Stmt
 	revokeRefreshTokenStmt          *sql.Stmt
 	rotateRefreshTokenStmt          *sql.Stmt
+	searchMessagesStmt              *sql.Stmt
 	setMemberRoleStmt               *sql.Stmt
 	softDeleteMessageStmt           *sql.Stmt
 	updateConversationNameStmt      *sql.Stmt
@@ -425,6 +434,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		revokeAllUserRefreshTokensStmt:  q.revokeAllUserRefreshTokensStmt,
 		revokeRefreshTokenStmt:          q.revokeRefreshTokenStmt,
 		rotateRefreshTokenStmt:          q.rotateRefreshTokenStmt,
+		searchMessagesStmt:              q.searchMessagesStmt,
 		setMemberRoleStmt:               q.setMemberRoleStmt,
 		softDeleteMessageStmt:           q.softDeleteMessageStmt,
 		updateConversationNameStmt:      q.updateConversationNameStmt,
