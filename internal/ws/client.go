@@ -41,8 +41,7 @@ func (c *Client) ReadPump(handleMessage func(client *Client, data []byte)) {
 	for {
 		_, data, err := c.Conn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				// TODO: - Look into websocket: close 1000 (normal)
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure, websocket.CloseNormalClosure) {
 				log.Printf("websocket error: %v", err)
 			}
 			break
