@@ -3,8 +3,11 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
 
+	"github.com/Anything-That-Works/GoPath/internal/cache"
 	"github.com/Anything-That-Works/GoPath/internal/database"
 	"github.com/Anything-That-Works/GoPath/internal/model"
 	"github.com/Anything-That-Works/GoPath/internal/ws"
@@ -108,6 +111,8 @@ func (apiConfig *apiConfig) handlerCreateConversation(w http.ResponseWriter, r *
 		}
 	}
 
+	apiConfig.Cache.DeleteByPattern(r.Context(), fmt.Sprintf("conversations:list:%s:*", userID.String()))
+
 	respondWithJSON(w, 201, model.APIResponse{
 		Success: true,
 		Message: "Conversation created successfully",
@@ -171,6 +176,8 @@ func (apiConfig *apiConfig) handlerAddMember(w http.ResponseWriter, r *http.Requ
 		respondWithJSON(w, 500, model.APIResponse{Success: false, Message: "Failed to add member"})
 		return
 	}
+
+	apiConfig.Cache.Delete(r.Context(), cache.KeyConversationMembers(params.ConversationID.String()))
 
 	respondWithJSON(w, 200, model.APIResponse{
 		Success: true,
@@ -271,6 +278,8 @@ func (apiConfig *apiConfig) handlerRemoveMember(w http.ResponseWriter, r *http.R
 		}
 	}
 
+	apiConfig.Cache.Delete(r.Context(), cache.KeyConversationMembers(params.ConversationID.String()))
+
 	respondWithJSON(w, 200, model.APIResponse{
 		Success: true,
 		Message: "Member removed successfully",
@@ -330,6 +339,8 @@ func (apiConfig *apiConfig) handlerSetRole(w http.ResponseWriter, r *http.Reques
 		respondWithJSON(w, 500, model.APIResponse{Success: false, Message: "Failed to update role"})
 		return
 	}
+
+	apiConfig.Cache.Delete(r.Context(), cache.KeyConversationMembers(params.ConversationID.String()))
 
 	respondWithJSON(w, 200, model.APIResponse{
 		Success: true,
@@ -395,7 +406,7 @@ func (apiConfig *apiConfig) handlerTransferOwnership(w http.ResponseWriter, r *h
 		respondWithJSON(w, 500, model.APIResponse{Success: false, Message: "Failed to promote new super admin"})
 		return
 	}
-
+	apiConfig.Cache.Delete(r.Context(), cache.KeyConversationMembers(params.ConversationID.String()))
 	respondWithJSON(w, 200, model.APIResponse{
 		Success: true,
 		Message: "Ownership transferred successfully",
@@ -452,7 +463,7 @@ func (apiConfig *apiConfig) handlerRenameGroup(w http.ResponseWriter, r *http.Re
 		respondWithJSON(w, 500, model.APIResponse{Success: false, Message: "Failed to rename group"})
 		return
 	}
-
+	apiConfig.Cache.DeleteByPattern(r.Context(), fmt.Sprintf("conversations:list:%s:*", userID.String()))
 	respondWithJSON(w, 200, model.APIResponse{
 		Success: true,
 		Message: "Group renamed successfully",
@@ -486,6 +497,25 @@ func (apiConfig *apiConfig) handlerGetConversations(w http.ResponseWriter, r *ht
 		params.Page = 1
 	}
 
+	cacheKey := cache.KeyConversationsList(userID.String(), params.Page, params.Limit)
+
+	// try cache first
+	if cached, err := apiConfig.Cache.Get(r.Context(), cacheKey); err == nil {
+		var conversations interface{}
+		if err := json.Unmarshal([]byte(cached), &conversations); err == nil {
+			respondWithJSON(w, 200, model.APIResponse{
+				Success: true,
+				Message: "Conversations fetched successfully",
+				Data: map[string]interface{}{
+					"conversations": conversations,
+					"limit":         params.Limit,
+					"page":          params.Page,
+				},
+			})
+			return
+		}
+	}
+
 	offset := (params.Page - 1) * params.Limit
 
 	conversations, err := apiConfig.DB.GetUserConversations(r.Context(), database.GetUserConversationsParams{
@@ -496,6 +526,13 @@ func (apiConfig *apiConfig) handlerGetConversations(w http.ResponseWriter, r *ht
 	if err != nil {
 		respondWithJSON(w, 500, model.APIResponse{Success: false, Message: "Failed to fetch conversations"})
 		return
+	}
+
+	// store in cache
+	if data, err := json.Marshal(conversations); err == nil {
+		if err := apiConfig.Cache.Set(r.Context(), cacheKey, string(data), cache.TTLConversationsList); err != nil {
+			log.Printf("Failed to cache conversations list: %v", err)
+		}
 	}
 
 	respondWithJSON(w, 200, model.APIResponse{
@@ -540,10 +577,32 @@ func (apiConfig *apiConfig) handlerGetConversationMembers(w http.ResponseWriter,
 		return
 	}
 
+	cacheKey := cache.KeyConversationMembers(params.ConversationID.String())
+
+	// try cache first
+	if cached, err := apiConfig.Cache.Get(r.Context(), cacheKey); err == nil {
+		var members interface{}
+		if err := json.Unmarshal([]byte(cached), &members); err == nil {
+			respondWithJSON(w, 200, model.APIResponse{
+				Success: true,
+				Message: "Members fetched successfully",
+				Data:    members,
+			})
+			return
+		}
+	}
+
 	members, err := apiConfig.DB.GetConversationMembers(r.Context(), params.ConversationID)
 	if err != nil {
 		respondWithJSON(w, 500, model.APIResponse{Success: false, Message: "Failed to fetch members"})
 		return
+	}
+
+	// store in cache
+	if data, err := json.Marshal(members); err == nil {
+		if err := apiConfig.Cache.Set(r.Context(), cacheKey, string(data), cache.TTLConversationMembers); err != nil {
+			log.Printf("Failed to cache conversation members: %v", err)
+		}
 	}
 
 	respondWithJSON(w, 200, model.APIResponse{
@@ -814,7 +873,7 @@ func (apiConfig *apiConfig) handlerDeleteConversation(w http.ResponseWriter, r *
 		ConversationID: &params.ConversationID,
 		SenderID:       &userID,
 	})
-
+	apiConfig.Cache.DeleteByPattern(r.Context(), fmt.Sprintf("conversations:list:%s:*", userID.String()))
 	respondWithJSON(w, 200, model.APIResponse{
 		Success: true,
 		Message: "Conversation deleted successfully",

@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Anything-That-Works/GoPath/internal/cache"
 	"github.com/Anything-That-Works/GoPath/internal/database"
 	"github.com/Anything-That-Works/GoPath/internal/storage"
 	"github.com/Anything-That-Works/GoPath/internal/ws"
@@ -26,6 +27,7 @@ type apiConfig struct {
 	Storage      storage.FileStorage
 	Hub          *ws.Hub
 	TrustedProxy string
+	Cache        cache.Cache
 }
 
 func requireEnv(key string) string {
@@ -48,6 +50,17 @@ func main() {
 	uploadsPath := requireEnv("UPLOADS_PATH")
 	baseURL := requireEnv("BASE_URL")
 	trustedProxy := os.Getenv("TRUSTED_PROXY")
+	redisURL := requireEnv("REDIS_URL")
+
+	redisCache, err := cache.NewRedisCache(redisURL)
+	if err != nil {
+		log.Fatal("Cannot connect to Redis: ", err)
+	}
+	defer func() {
+		if err := redisCache.Close(); err != nil {
+			log.Printf("Error closing Redis connection: %v", err)
+		}
+	}()
 
 	con, err := sql.Open("postgres", dbURL)
 	if err != nil {
@@ -77,6 +90,7 @@ func main() {
 		Storage:      storage.NewLocalStorage(uploadsPath, baseURL),
 		Hub:          hub,
 		TrustedProxy: trustedProxy,
+		Cache:        redisCache,
 	}
 
 	msgHandler := ws.NewMessageHandler(hub, apiCfg.DB, apiCfg.Storage)
@@ -175,7 +189,7 @@ func main() {
 		Handler:      router,
 		Addr:         ":" + portString,
 		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 0, // disabled globally, handled per route
+		WriteTimeout: 0,
 		IdleTimeout:  120 * time.Second,
 	}
 

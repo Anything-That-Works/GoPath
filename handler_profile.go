@@ -2,8 +2,10 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"net/http"
 
+	"github.com/Anything-That-Works/GoPath/internal/cache"
 	"github.com/Anything-That-Works/GoPath/internal/model"
 	"github.com/google/uuid"
 )
@@ -15,6 +17,22 @@ func (apiConfig *apiConfig) handlerGetProfile(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	cacheKey := cache.KeyUserProfile(userID.String())
+
+	// try cache first
+	if cached, err := apiConfig.Cache.Get(r.Context(), cacheKey); err == nil {
+		var user model.UserSummary
+		if err := json.Unmarshal([]byte(cached), &user); err == nil {
+			respondWithJSON(w, 200, model.APIResponse{
+				Success: true,
+				Message: "Profile fetched successfully",
+				Data:    user,
+			})
+			return
+		}
+	}
+
+	// cache miss — fetch from DB
 	user, err := apiConfig.DB.GetUserByID(r.Context(), userID)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -25,9 +43,16 @@ func (apiConfig *apiConfig) handlerGetProfile(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	summary := databaseUserToUserSummary(user)
+
+	// store in cache
+	if data, err := json.Marshal(summary); err == nil {
+		_ = apiConfig.Cache.Set(r.Context(), cacheKey, string(data), cache.TTLUserProfile)
+	}
+
 	respondWithJSON(w, 200, model.APIResponse{
 		Success: true,
 		Message: "Profile fetched successfully",
-		Data:    databaseUserToUserSummary(user),
+		Data:    summary,
 	})
 }

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Anything-That-Works/GoPath/internal/auth"
+	"github.com/Anything-That-Works/GoPath/internal/cache"
 	"github.com/Anything-That-Works/GoPath/internal/database"
 	"github.com/Anything-That-Works/GoPath/internal/model"
 	"github.com/google/uuid"
@@ -263,6 +264,8 @@ func (apiConfig *apiConfig) handlerUpdateUser(w http.ResponseWriter, r *http.Req
 		respondWithJSON(w, 500, model.APIResponse{Success: false, Message: "Failed to update user"})
 		return
 	}
+
+	apiConfig.Cache.Delete(r.Context(), cache.KeyUserProfile(userID.String()))
 
 	respondWithJSON(w, 200, model.APIResponse{
 		Success: true,
