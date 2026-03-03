@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -15,7 +14,6 @@ import (
 	"github.com/Anything-That-Works/GoPath/internal/database"
 	"github.com/Anything-That-Works/GoPath/internal/storage"
 	"github.com/Anything-That-Works/GoPath/internal/ws"
-
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
@@ -27,6 +25,7 @@ type apiConfig struct {
 	JWTSecretKey []byte
 	Storage      storage.FileStorage
 	Hub          *ws.Hub
+	TrustedProxy string
 }
 
 func requireEnv(key string) string {
@@ -38,9 +37,8 @@ func requireEnv(key string) string {
 }
 
 func main() {
-	// load .env first before calling requireEnv
 	if err := godotenv.Load(".env"); err != nil {
-		fmt.Println(err)
+		log.Println("No .env file found, using environment variables")
 	}
 
 	portString := requireEnv("PORT")
@@ -49,28 +47,39 @@ func main() {
 	allowedOrigins := requireEnv("ALLOWED_ORIGINS")
 	uploadsPath := requireEnv("UPLOADS_PATH")
 	baseURL := requireEnv("BASE_URL")
+	trustedProxy := os.Getenv("TRUSTED_PROXY")
 
 	con, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		log.Fatal("Cannot connect to database: ", err)
 	}
+	defer func() {
+		if err := con.Close(); err != nil {
+			log.Printf("Error closing database connection: %v", err)
+		}
+	}()
 
-	con.SetMaxOpenConns(25)
+	con.SetMaxOpenConns(50)
 	con.SetMaxIdleConns(10)
 	con.SetConnMaxLifetime(5 * time.Minute)
 	con.SetConnMaxIdleTime(2 * time.Minute)
 
+	if err := con.Ping(); err != nil {
+		log.Fatal("Cannot ping database: ", err)
+	}
+
 	hub := ws.NewHub()
 	go hub.Run()
 
-	apiConfig := apiConfig{
+	apiCfg := apiConfig{
 		DB:           database.New(con),
 		JWTSecretKey: []byte(jwtSecretKey),
 		Storage:      storage.NewLocalStorage(uploadsPath, baseURL),
 		Hub:          hub,
+		TrustedProxy: trustedProxy,
 	}
 
-	msgHandler := ws.NewMessageHandler(hub, apiConfig.DB, apiConfig.Storage)
+	msgHandler := ws.NewMessageHandler(hub, apiCfg.DB, apiCfg.Storage)
 
 	router := chi.NewRouter()
 
@@ -84,60 +93,89 @@ func main() {
 	}))
 
 	router.Use(middlewareRateLimit)
-	router.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r.Body = http.MaxBytesReader(w, r.Body, 1*1024*1024)
-			next.ServeHTTP(w, r)
-		})
-	})
+
+	// security headers
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("X-Content-Type-Options", "nosniff")
 			w.Header().Set("X-Frame-Options", "DENY")
 			w.Header().Set("X-XSS-Protection", "1; mode=block")
 			w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+			w.Header().Set("Content-Security-Policy",
+				"default-src 'self'; "+
+					"connect-src 'self' ws: wss: https:; "+
+					"img-src 'self' data: https:; "+
+					"media-src 'self' https:",
+			)
 			next.ServeHTTP(w, r)
 		})
 	})
 
+	// 1MB body limit middleware
+	limitMiddleware := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, 1*1024*1024)
+			next.ServeHTTP(w, r)
+		})
+	}
+
+	// write timeout middleware
+	writeTimeoutMiddleware := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			rc := http.NewResponseController(w)
+			if err := rc.SetWriteDeadline(time.Now().Add(30 * time.Second)); err != nil {
+				log.Printf("Error setting write deadline: %v", err)
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+
 	v1Router := chi.NewRouter()
+
 	v1Router.Get("/healthz", handlerReadiness)
 	v1Router.Get("/error", handlerError)
-	v1Router.Post("/user", apiConfig.handlerCreateUser)
-	v1Router.Post("/user/login", apiConfig.handlerLogin)
-	v1Router.Post("/user/lookup", apiConfig.handlerLookupUser)
-	v1Router.Post("/user/exists", apiConfig.handlerEmailExists)
-	v1Router.Put("/user", apiConfig.middlewareAuth(apiConfig.handlerUpdateUser))
-	v1Router.Get("/user/me", apiConfig.middlewareAuth(apiConfig.handlerGetProfile))
-	v1Router.Post("/user/refresh", apiConfig.handlerRefreshToken)
-	v1Router.Post("/user/logout", apiConfig.middlewareAuth(apiConfig.handlerLogout))
-	v1Router.Post("/user/logout-all", apiConfig.middlewareAuth(apiConfig.handlerLogoutAll))
 
-	v1Router.Post("/conversations/create", apiConfig.middlewareAuth(apiConfig.handlerCreateConversation))
-	v1Router.Post("/conversations", apiConfig.middlewareAuth(apiConfig.handlerGetConversations))
-	v1Router.Post("/conversations/members", apiConfig.middlewareAuth(apiConfig.handlerGetConversationMembers))
-	v1Router.Post("/conversations/members/add", apiConfig.middlewareAuth(apiConfig.handlerAddMember))
-	v1Router.Post("/conversations/members/remove", apiConfig.middlewareAuth(apiConfig.handlerRemoveMember))
-	v1Router.Post("/conversations/members/role", apiConfig.middlewareAuth(apiConfig.handlerSetRole))
-	v1Router.Post("/conversations/transfer-ownership", apiConfig.middlewareAuth(apiConfig.handlerTransferOwnership))
-	v1Router.Put("/conversations/name", apiConfig.middlewareAuth(apiConfig.handlerRenameGroup))
-	v1Router.Post("/conversations/messages", apiConfig.middlewareAuth(apiConfig.handlerGetMessages))
-	v1Router.Post("/conversations/messages/search", apiConfig.middlewareAuth(apiConfig.handlerSearchMessages))
-	v1Router.Post("/conversations/online", apiConfig.middlewareAuth(apiConfig.handlerGetOnlineMembers))
-	v1Router.Delete("/conversations", apiConfig.middlewareAuth(apiConfig.handlerDeleteConversation))
+	// routes with 1MB body limit and write timeout
+	v1Router.Group(func(r chi.Router) {
+		r.Use(limitMiddleware)
+		r.Use(writeTimeoutMiddleware)
 
-	v1Router.Post("/files", apiConfig.middlewareAuth(apiConfig.handlerUploadFile))
-	v1Router.Get("/files/{filename}", apiConfig.middlewareAuth(apiConfig.handlerServeFile))
+		r.Post("/user", apiCfg.handlerCreateUser)
+		r.Post("/user/login", apiCfg.handlerLogin)
+		r.Post("/user/lookup", apiCfg.handlerLookupUser)
+		r.Post("/user/exists", apiCfg.handlerEmailExists)
+		r.Put("/user", apiCfg.middlewareAuth(apiCfg.handlerUpdateUser))
+		r.Get("/user/me", apiCfg.middlewareAuth(apiCfg.handlerGetProfile))
+		r.Post("/user/refresh", apiCfg.handlerRefreshToken)
+		r.Post("/user/logout", apiCfg.middlewareAuth(apiCfg.handlerLogout))
+		r.Post("/user/logout-all", apiCfg.middlewareAuth(apiCfg.handlerLogoutAll))
 
-	v1Router.Get("/ws", apiConfig.handlerWebSocket(hub, msgHandler))
+		r.Post("/conversations/create", apiCfg.middlewareAuth(apiCfg.handlerCreateConversation))
+		r.Post("/conversations", apiCfg.middlewareAuth(apiCfg.handlerGetConversations))
+		r.Post("/conversations/members", apiCfg.middlewareAuth(apiCfg.handlerGetConversationMembers))
+		r.Post("/conversations/members/add", apiCfg.middlewareAuth(apiCfg.handlerAddMember))
+		r.Post("/conversations/members/remove", apiCfg.middlewareAuth(apiCfg.handlerRemoveMember))
+		r.Post("/conversations/members/role", apiCfg.middlewareAuth(apiCfg.handlerSetRole))
+		r.Post("/conversations/transfer-ownership", apiCfg.middlewareAuth(apiCfg.handlerTransferOwnership))
+		r.Put("/conversations/name", apiCfg.middlewareAuth(apiCfg.handlerRenameGroup))
+		r.Post("/conversations/messages", apiCfg.middlewareAuth(apiCfg.handlerGetMessages))
+		r.Post("/conversations/messages/search", apiCfg.middlewareAuth(apiCfg.handlerSearchMessages))
+		r.Post("/conversations/online", apiCfg.middlewareAuth(apiCfg.handlerGetOnlineMembers))
+		r.Delete("/conversations", apiCfg.middlewareAuth(apiCfg.handlerDeleteConversation))
+	})
+
+	// routes without body limit
+	v1Router.Post("/files", apiCfg.middlewareAuth(apiCfg.handlerUploadFile))
+	v1Router.Get("/files/{filename}", apiCfg.middlewareAuth(apiCfg.handlerServeFile))
+	v1Router.Get("/ws", apiCfg.handlerWebSocket(hub, msgHandler))
 
 	router.Mount("/v1", v1Router)
 
 	srv := &http.Server{
 		Handler:      router,
 		Addr:         ":" + portString,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 0, // disabled globally, handled per route
 		IdleTimeout:  120 * time.Second,
 	}
 
@@ -161,5 +199,6 @@ func main() {
 		log.Fatal("Server forced to shutdown:", err)
 	}
 
+	hub.Stop()
 	log.Println("Server stopped")
 }

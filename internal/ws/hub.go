@@ -5,13 +5,14 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 )
 
 type Hub struct {
-	// conversation_id -> userID -> set of clients (multiple devices per user)
 	Rooms      map[uuid.UUID]map[uuid.UUID]map[*Client]bool
 	Register   chan *Client
 	Unregister chan *Client
+	stop       chan struct{}
 	mu         sync.RWMutex
 }
 
@@ -20,12 +21,42 @@ func NewHub() *Hub {
 		Rooms:      make(map[uuid.UUID]map[uuid.UUID]map[*Client]bool),
 		Register:   make(chan *Client),
 		Unregister: make(chan *Client),
+		stop:       make(chan struct{}),
 	}
+}
+
+func (h *Hub) Stop() {
+	close(h.stop)
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	// close all client connections concurrently
+	var wg sync.WaitGroup
+	for _, users := range h.Rooms {
+		for _, clients := range users {
+			for client := range clients {
+				wg.Add(1)
+				go func(c *Client) {
+					defer wg.Done()
+					_ = c.Conn.WriteMessage(
+						websocket.CloseMessage,
+						websocket.FormatCloseMessage(websocket.CloseGoingAway, "server shutting down"),
+					)
+					_ = c.Conn.Close()
+				}(client)
+			}
+		}
+	}
+	wg.Wait()
+	h.Rooms = make(map[uuid.UUID]map[uuid.UUID]map[*Client]bool)
 }
 
 func (h *Hub) Run() {
 	for {
 		select {
+		case <-h.stop:
+			return
 		case client := <-h.Register:
 			h.mu.Lock()
 			if _, ok := h.Rooms[client.ConversationID]; !ok {
@@ -52,7 +83,6 @@ func (h *Hub) Run() {
 			if users, ok := h.Rooms[client.ConversationID]; ok {
 				if clients, ok := users[client.UserID]; ok {
 					delete(clients, client)
-					// check before closing
 					if len(clients) == 0 {
 						isLastConnection = true
 						delete(users, client.UserID)
@@ -62,7 +92,6 @@ func (h *Hub) Run() {
 					delete(h.Rooms, client.ConversationID)
 				}
 			}
-			// safe to close after removing from map
 			select {
 			case _, ok := <-client.Send:
 				if ok {
@@ -73,9 +102,8 @@ func (h *Hub) Run() {
 			}
 			h.mu.Unlock()
 
-			// only broadcast offline if all devices disconnected
 			if isLastConnection {
-				h.BroadcastToConversation(client.ConversationID, client.UserID, OutgoingMessage{
+				go h.BroadcastToConversation(client.ConversationID, client.UserID, OutgoingMessage{
 					Type:           TypeOffline,
 					ConversationID: &client.ConversationID,
 					SenderID:       &client.UserID,
@@ -85,7 +113,6 @@ func (h *Hub) Run() {
 	}
 }
 
-// BroadcastToConversation sends to all clients in a conversation except the sender
 func (h *Hub) BroadcastToConversation(conversationID uuid.UUID, senderID uuid.UUID, msg OutgoingMessage) {
 	data, err := json.Marshal(msg)
 	if err != nil {
@@ -112,7 +139,6 @@ func (h *Hub) BroadcastToConversation(conversationID uuid.UUID, senderID uuid.UU
 	}
 }
 
-// SendToUser sends to all connections of a specific user in a conversation
 func (h *Hub) SendToUser(conversationID uuid.UUID, userID uuid.UUID, msg OutgoingMessage) {
 	data, err := json.Marshal(msg)
 	if err != nil {
@@ -136,7 +162,6 @@ func (h *Hub) SendToUser(conversationID uuid.UUID, userID uuid.UUID, msg Outgoin
 	}
 }
 
-// IsUserOnline checks if a user has any active connections in a conversation
 func (h *Hub) IsUserOnline(conversationID uuid.UUID, userID uuid.UUID) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -149,7 +174,6 @@ func (h *Hub) IsUserOnline(conversationID uuid.UUID, userID uuid.UUID) bool {
 	return false
 }
 
-// GetOnlineUsers returns all online user IDs in a conversation
 func (h *Hub) GetOnlineUsers(conversationID uuid.UUID) []uuid.UUID {
 	h.mu.RLock()
 	defer h.mu.RUnlock()

@@ -8,41 +8,55 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
-func getIPAddress(r *http.Request) pqtype.Inet {
-	ip := r.Header.Get("X-Forwarded-For")
-
-	if ip != "" {
-		// take first IP if multiple
-		ip = strings.Split(ip, ",")[0]
-		ip = strings.TrimSpace(ip)
-	}
-
-	if ip == "" {
-		ip = r.Header.Get("X-Real-IP")
-	}
-
-	if ip == "" {
-		host, _, err := net.SplitHostPort(r.RemoteAddr)
-		if err == nil {
-			ip = host
-		}
-	}
-
-	parsed := net.ParseIP(ip)
-	if parsed == nil {
+func (apiCfg *apiConfig) getIPAddress(r *http.Request) pqtype.Inet {
+	remoteIP, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
 		return pqtype.Inet{Valid: false}
 	}
 
-	// correct mask for IPv4 vs IPv6
-	maskSize := 32
-	if parsed.To4() == nil {
-		maskSize = 128
+	// only trust forwarded headers if request is from trusted proxy
+	if apiCfg.TrustedProxy != "" && remoteIP == apiCfg.TrustedProxy {
+		if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+			// X-Forwarded-For can be a comma separated list — take the first
+			if idx := len(fwd); idx > 0 {
+				for i := 0; i < len(fwd); i++ {
+					if fwd[i] == ',' {
+						fwd = fwd[:i]
+						break
+					}
+				}
+			}
+			ip := net.ParseIP(strings.TrimSpace(fwd))
+			if ip != nil {
+				return buildInet(ip)
+			}
+		}
+
+		if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
+			ip := net.ParseIP(strings.TrimSpace(realIP))
+			if ip != nil {
+				return buildInet(ip)
+			}
+		}
 	}
 
+	// fall back to direct remote address
+	ip := net.ParseIP(remoteIP)
+	if ip == nil {
+		return pqtype.Inet{Valid: false}
+	}
+	return buildInet(ip)
+}
+
+func buildInet(ip net.IP) pqtype.Inet {
+	bits := 32
+	if ip.To4() == nil {
+		bits = 128 // IPv6
+	}
 	return pqtype.Inet{
 		IPNet: net.IPNet{
-			IP:   parsed,
-			Mask: net.CIDRMask(maskSize, maskSize),
+			IP:   ip,
+			Mask: net.CIDRMask(bits, bits),
 		},
 		Valid: true,
 	}

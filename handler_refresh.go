@@ -72,7 +72,7 @@ func (apiConfig *apiConfig) handlerRefreshToken(w http.ResponseWriter, r *http.R
 		TokenHash: newTokenHash,
 		ExpiresAt: tr.RefreshToken.Expires,
 		UserAgent: sql.NullString{String: r.UserAgent(), Valid: true},
-		IpAddress: getIPAddress(r),
+		IpAddress: apiConfig.getIPAddress(r),
 	})
 	if err != nil {
 		respondWithJSON(w, 500, model.APIResponse{Success: false, Message: "Failed to store refresh token"})

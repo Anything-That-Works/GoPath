@@ -86,7 +86,7 @@ func (apiConfig *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Req
 		respondWithJSON(w, 500, payload)
 		return
 	}
-	ip := getIPAddress(r)
+	ip := apiConfig.getIPAddress(r)
 
 	_, err = apiConfig.DB.CreateRefreshToken(r.Context(), database.CreateRefreshTokenParams{
 		UserID:    user.ID,
@@ -315,7 +315,7 @@ func (apiConfig *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request)
 		TokenHash: tokenHash,
 		ExpiresAt: tr.RefreshToken.Expires,
 		UserAgent: sql.NullString{String: r.UserAgent(), Valid: true},
-		IpAddress: getIPAddress(r),
+		IpAddress: apiConfig.getIPAddress(r),
 	})
 	if err != nil {
 		respondWithJSON(w, 500, model.APIResponse{Success: false, Message: "Failed to store refresh token"})
