@@ -2,6 +2,8 @@ package main
 
 import (
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/Anything-That-Works/GoPath/internal/database"
 	"github.com/Anything-That-Works/GoPath/internal/model"
@@ -14,7 +16,14 @@ var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		return true // restrict in production
+		origin := r.Header.Get("Origin")
+		allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
+		for _, allowed := range strings.Split(allowedOrigins, ",") {
+			if origin == strings.TrimSpace(allowed) {
+				return true
+			}
+		}
+		return false
 	},
 }
 

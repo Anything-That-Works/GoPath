@@ -33,7 +33,7 @@ func (q *Queries) AddConversationMember(ctx context.Context, arg AddConversation
 const createConversation = `-- name: CreateConversation :one
 INSERT INTO conversations (created_by, is_group, name)
 VALUES ($1, $2, $3)
-RETURNING id, is_group, name, created_by, created_at, updated_at
+RETURNING id, is_group, name, created_by, created_at, updated_at, deleted_at
 `
 
 type CreateConversationParams struct {
@@ -52,12 +52,22 @@ func (q *Queries) CreateConversation(ctx context.Context, arg CreateConversation
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
+const deleteConversation = `-- name: DeleteConversation :exec
+UPDATE conversations SET deleted_at = NOW() WHERE id = $1
+`
+
+func (q *Queries) DeleteConversation(ctx context.Context, id uuid.UUID) error {
+	_, err := q.exec(ctx, q.deleteConversationStmt, deleteConversation, id)
+	return err
+}
+
 const getConversationByID = `-- name: GetConversationByID :one
-SELECT id, is_group, name, created_by, created_at, updated_at FROM conversations WHERE id = $1
+SELECT id, is_group, name, created_by, created_at, updated_at, deleted_at FROM conversations WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetConversationByID(ctx context.Context, id uuid.UUID) (Conversation, error) {
@@ -70,6 +80,7 @@ func (q *Queries) GetConversationByID(ctx context.Context, id uuid.UUID) (Conver
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -140,10 +151,11 @@ func (q *Queries) GetConversationMembers(ctx context.Context, conversationID uui
 }
 
 const getDirectConversation = `-- name: GetDirectConversation :one
-SELECT c.id, c.is_group, c.name, c.created_by, c.created_at, c.updated_at FROM conversations c
+SELECT c.id, c.is_group, c.name, c.created_by, c.created_at, c.updated_at, c.deleted_at FROM conversations c
 JOIN conversation_members cm1 ON cm1.conversation_id = c.id AND cm1.user_id = $1
 JOIN conversation_members cm2 ON cm2.conversation_id = c.id AND cm2.user_id = $2
 WHERE c.is_group = FALSE
+AND c.deleted_at IS NULL
 LIMIT 1
 `
 
@@ -162,6 +174,7 @@ func (q *Queries) GetDirectConversation(ctx context.Context, arg GetDirectConver
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -193,9 +206,10 @@ func (q *Queries) GetFirstAdminOrMember(ctx context.Context, arg GetFirstAdminOr
 }
 
 const getUserConversations = `-- name: GetUserConversations :many
-SELECT c.id, c.is_group, c.name, c.created_by, c.created_at, c.updated_at FROM conversations c
+SELECT c.id, c.is_group, c.name, c.created_by, c.created_at, c.updated_at, c.deleted_at FROM conversations c
 JOIN conversation_members cm ON cm.conversation_id = c.id
 WHERE cm.user_id = $1
+AND c.deleted_at IS NULL
 ORDER BY c.updated_at DESC
 LIMIT $2 OFFSET $3
 `
@@ -222,6 +236,7 @@ func (q *Queries) GetUserConversations(ctx context.Context, arg GetUserConversat
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -272,7 +287,7 @@ const updateConversationName = `-- name: UpdateConversationName :one
 UPDATE conversations
 SET name = $2, updated_at = NOW()
 WHERE id = $1
-RETURNING id, is_group, name, created_by, created_at, updated_at
+RETURNING id, is_group, name, created_by, created_at, updated_at, deleted_at
 `
 
 type UpdateConversationNameParams struct {
@@ -290,6 +305,7 @@ func (q *Queries) UpdateConversationName(ctx context.Context, arg UpdateConversa
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }

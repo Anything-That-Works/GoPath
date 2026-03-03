@@ -8,13 +8,16 @@ import (
 	"time"
 
 	"github.com/Anything-That-Works/GoPath/internal/database"
+	"github.com/Anything-That-Works/GoPath/internal/ratelimit"
 	"github.com/google/uuid"
+	"golang.org/x/time/rate"
 )
 
 type MessageHandler struct {
 	Hub     *Hub
 	DB      *database.Queries
 	Storage StorageProvider
+	limiter *ratelimit.Limiter
 }
 
 type StorageProvider interface {
@@ -22,10 +25,24 @@ type StorageProvider interface {
 }
 
 func NewMessageHandler(hub *Hub, db *database.Queries, storage StorageProvider) *MessageHandler {
-	return &MessageHandler{Hub: hub, DB: db, Storage: storage}
+	return &MessageHandler{
+		Hub:     hub,
+		DB:      db,
+		Storage: storage,
+		// 5 messages per second, burst of 10
+		limiter: ratelimit.NewLimiter(rate.Limit(5), 10),
+	}
 }
 
 func (h *MessageHandler) Handle(client *Client, data []byte) {
+	if !h.limiter.Allow(client.UserID.String()) {
+		client.SendMessage(OutgoingMessage{
+			Type:  TypeError,
+			Error: "Too many messages, please slow down",
+		})
+		return
+	}
+
 	var msg IncomingMessage
 	if err := json.Unmarshal(data, &msg); err != nil {
 		client.SendMessage(OutgoingMessage{

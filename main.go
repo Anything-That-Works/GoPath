@@ -1,11 +1,16 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"strings"
+	"syscall"
+	"time"
 
 	"github.com/Anything-That-Works/GoPath/internal/database"
 	"github.com/Anything-That-Works/GoPath/internal/storage"
@@ -24,33 +29,36 @@ type apiConfig struct {
 	Hub          *ws.Hub
 }
 
+func requireEnv(key string) string {
+	val := os.Getenv(key)
+	if val == "" {
+		log.Fatalf("%s value not found.", key)
+	}
+	return val
+}
+
 func main() {
-	envLoadError := godotenv.Load(".env")
-	if envLoadError != nil {
-		fmt.Println(envLoadError)
-	}
-	portString := os.Getenv("PORT")
-
-	if portString == "" {
-		log.Fatal("PORT value not found.")
+	// load .env first before calling requireEnv
+	if err := godotenv.Load(".env"); err != nil {
+		fmt.Println(err)
 	}
 
-	dbURL := os.Getenv("DB_URL")
-
-	if dbURL == "" {
-		log.Fatal("DB_URL value not found.")
-	}
-
-	jwtSecretKey := os.Getenv("JWT_SECRET_KEY")
-
-	if jwtSecretKey == "" {
-		log.Fatal("JWT_SECRET_KEY value not found.")
-	}
+	portString := requireEnv("PORT")
+	dbURL := requireEnv("DB_URL")
+	jwtSecretKey := requireEnv("JWT_SECRET_KEY")
+	allowedOrigins := requireEnv("ALLOWED_ORIGINS")
+	uploadsPath := requireEnv("UPLOADS_PATH")
+	baseURL := requireEnv("BASE_URL")
 
 	con, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		log.Fatal("Cannot connect to database: ", err)
 	}
+
+	con.SetMaxOpenConns(25)
+	con.SetMaxIdleConns(10)
+	con.SetConnMaxLifetime(5 * time.Minute)
+	con.SetConnMaxIdleTime(2 * time.Minute)
 
 	hub := ws.NewHub()
 	go hub.Run()
@@ -58,7 +66,7 @@ func main() {
 	apiConfig := apiConfig{
 		DB:           database.New(con),
 		JWTSecretKey: []byte(jwtSecretKey),
-		Storage:      storage.NewLocalStorage("./uploads", "http://localhost:"+portString),
+		Storage:      storage.NewLocalStorage(uploadsPath, baseURL),
 		Hub:          hub,
 	}
 
@@ -67,13 +75,30 @@ func main() {
 	router := chi.NewRouter()
 
 	router.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"https://*", "http://*"},
+		AllowedOrigins:   strings.Split(allowedOrigins, ","),
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"*"},
+		AllowedHeaders:   []string{"Authorization", "Content-Type"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: false,
 		MaxAge:           300,
 	}))
+
+	router.Use(middlewareRateLimit)
+	router.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, 1*1024*1024)
+			next.ServeHTTP(w, r)
+		})
+	})
+	router.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.Header().Set("X-Frame-Options", "DENY")
+			w.Header().Set("X-XSS-Protection", "1; mode=block")
+			w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+			next.ServeHTTP(w, r)
+		})
+	})
 
 	v1Router := chi.NewRouter()
 	v1Router.Get("/healthz", handlerReadiness)
@@ -86,6 +111,7 @@ func main() {
 	v1Router.Get("/user/me", apiConfig.middlewareAuth(apiConfig.handlerGetProfile))
 	v1Router.Post("/user/refresh", apiConfig.handlerRefreshToken)
 	v1Router.Post("/user/logout", apiConfig.middlewareAuth(apiConfig.handlerLogout))
+	v1Router.Post("/user/logout-all", apiConfig.middlewareAuth(apiConfig.handlerLogoutAll))
 
 	v1Router.Post("/conversations/create", apiConfig.middlewareAuth(apiConfig.handlerCreateConversation))
 	v1Router.Post("/conversations", apiConfig.middlewareAuth(apiConfig.handlerGetConversations))
@@ -98,6 +124,7 @@ func main() {
 	v1Router.Post("/conversations/messages", apiConfig.middlewareAuth(apiConfig.handlerGetMessages))
 	v1Router.Post("/conversations/messages/search", apiConfig.middlewareAuth(apiConfig.handlerSearchMessages))
 	v1Router.Post("/conversations/online", apiConfig.middlewareAuth(apiConfig.handlerGetOnlineMembers))
+	v1Router.Delete("/conversations", apiConfig.middlewareAuth(apiConfig.handlerDeleteConversation))
 
 	v1Router.Post("/files", apiConfig.middlewareAuth(apiConfig.handlerUploadFile))
 	v1Router.Get("/files/{filename}", apiConfig.middlewareAuth(apiConfig.handlerServeFile))
@@ -105,16 +132,34 @@ func main() {
 	v1Router.Get("/ws", apiConfig.handlerWebSocket(hub, msgHandler))
 
 	router.Mount("/v1", v1Router)
+
 	srv := &http.Server{
-		Handler: router,
-		Addr:    ":" + portString,
+		Handler:      router,
+		Addr:         ":" + portString,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 
-	log.Printf("Server starting on port %v", portString)
+	go func() {
+		log.Printf("Server starting on port %v", portString)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatal(err)
+		}
+	}()
 
-	serveError := srv.ListenAndServe()
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
 
-	if serveError != nil {
-		log.Fatal(serveError)
+	log.Println("Shutting down server...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatal("Server forced to shutdown:", err)
 	}
+
+	log.Println("Server stopped")
 }

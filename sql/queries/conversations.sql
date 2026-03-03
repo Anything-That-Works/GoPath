@@ -4,19 +4,21 @@ VALUES ($1, $2, $3)
 RETURNING *;
 
 -- name: GetConversationByID :one
-SELECT * FROM conversations WHERE id = $1;
+SELECT * FROM conversations WHERE id = $1 AND deleted_at IS NULL;
 
 -- name: GetDirectConversation :one
 SELECT c.* FROM conversations c
 JOIN conversation_members cm1 ON cm1.conversation_id = c.id AND cm1.user_id = $1
 JOIN conversation_members cm2 ON cm2.conversation_id = c.id AND cm2.user_id = $2
 WHERE c.is_group = FALSE
+AND c.deleted_at IS NULL
 LIMIT 1;
 
 -- name: GetUserConversations :many
 SELECT c.* FROM conversations c
 JOIN conversation_members cm ON cm.conversation_id = c.id
 WHERE cm.user_id = $1
+AND c.deleted_at IS NULL
 ORDER BY c.updated_at DESC
 LIMIT $2 OFFSET $3;
 
@@ -67,3 +69,6 @@ RETURNING *;
 UPDATE conversations
 SET updated_at = NOW()
 WHERE id = $1;
+
+-- name: DeleteConversation :exec
+UPDATE conversations SET deleted_at = NOW() WHERE id = $1;

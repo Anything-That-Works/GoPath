@@ -17,6 +17,7 @@ type Querier interface {
 	CreateMessage(ctx context.Context, arg CreateMessageParams) (Message, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (RefreshToken, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	DeleteConversation(ctx context.Context, id uuid.UUID) error
 	DeleteFile(ctx context.Context, arg DeleteFileParams) error
 	DeleteUser(ctx context.Context, id uuid.UUID) error
 	EditMessage(ctx context.Context, arg EditMessageParams) (Message, error)

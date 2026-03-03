@@ -7,6 +7,7 @@ import (
 
 	"github.com/Anything-That-Works/GoPath/internal/database"
 	"github.com/Anything-That-Works/GoPath/internal/model"
+	"github.com/Anything-That-Works/GoPath/internal/ws"
 	"github.com/google/uuid"
 )
 
@@ -746,5 +747,76 @@ func (apiConfig *apiConfig) handlerGetOnlineMembers(w http.ResponseWriter, r *ht
 		Data: map[string]interface{}{
 			"online_users": onlineUsers,
 		},
+	})
+}
+
+func (apiConfig *apiConfig) handlerDeleteConversation(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value(contextKeyUserID).(uuid.UUID)
+	if !ok {
+		respondWithJSON(w, 401, model.APIResponse{Success: false, Message: "Unauthorized"})
+		return
+	}
+
+	type parameters struct {
+		ConversationID uuid.UUID `json:"conversation_id"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	if err := decoder.Decode(&params); err != nil {
+		respondWithJSON(w, 400, model.APIResponse{Success: false, Message: "Invalid request payload"})
+		return
+	}
+
+	if params.ConversationID == uuid.Nil {
+		respondWithJSON(w, 400, model.APIResponse{Success: false, Message: "conversation_id required"})
+		return
+	}
+
+	conversation, err := apiConfig.DB.GetConversationByID(r.Context(), params.ConversationID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			respondWithJSON(w, 404, model.APIResponse{Success: false, Message: "Conversation not found"})
+			return
+		}
+		respondWithJSON(w, 500, model.APIResponse{Success: false, Message: "Failed to fetch conversation"})
+		return
+	}
+
+	member, err := apiConfig.DB.GetConversationMember(r.Context(), database.GetConversationMemberParams{
+		ConversationID: params.ConversationID,
+		UserID:         userID,
+	})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			respondWithJSON(w, 403, model.APIResponse{Success: false, Message: "Not a member of this conversation"})
+			return
+		}
+		respondWithJSON(w, 500, model.APIResponse{Success: false, Message: "Failed to verify membership"})
+		return
+	}
+
+	// group: only super_admin can delete
+	if conversation.IsGroup && member.Role != database.MemberRoleSuperAdmin {
+		respondWithJSON(w, 403, model.APIResponse{Success: false, Message: "Only super admin can delete the group"})
+		return
+	}
+
+	err = apiConfig.DB.DeleteConversation(r.Context(), params.ConversationID)
+	if err != nil {
+		respondWithJSON(w, 500, model.APIResponse{Success: false, Message: "Failed to delete conversation"})
+		return
+	}
+
+	// notify all online members that conversation was deleted
+	apiConfig.Hub.BroadcastToConversation(params.ConversationID, userID, ws.OutgoingMessage{
+		Type:           ws.TypeDelete,
+		ConversationID: &params.ConversationID,
+		SenderID:       &userID,
+	})
+
+	respondWithJSON(w, 200, model.APIResponse{
+		Success: true,
+		Message: "Conversation deleted successfully",
 	})
 }
