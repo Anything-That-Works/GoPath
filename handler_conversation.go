@@ -111,7 +111,9 @@ func (apiConfig *apiConfig) handlerCreateConversation(w http.ResponseWriter, r *
 		}
 	}
 
-	apiConfig.Cache.DeleteByPattern(r.Context(), fmt.Sprintf("conversations:list:%s:*", userID.String()))
+	if err := apiConfig.Cache.DeleteByPattern(r.Context(), fmt.Sprintf("conversations:list:%s:*", userID.String())); err != nil {
+		log.Printf("Failed to invalidate conversations cache: %v", err)
+	}
 
 	respondWithJSON(w, 201, model.APIResponse{
 		Success: true,
@@ -177,7 +179,9 @@ func (apiConfig *apiConfig) handlerAddMember(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	apiConfig.Cache.Delete(r.Context(), cache.KeyConversationMembers(params.ConversationID.String()))
+	if err := apiConfig.Cache.Delete(r.Context(), cache.KeyConversationMembers(params.ConversationID.String())); err != nil {
+		log.Printf("Failed to invalidate conversation members cache: %v", err)
+	}
 
 	respondWithJSON(w, 200, model.APIResponse{
 		Success: true,
@@ -278,7 +282,9 @@ func (apiConfig *apiConfig) handlerRemoveMember(w http.ResponseWriter, r *http.R
 		}
 	}
 
-	apiConfig.Cache.Delete(r.Context(), cache.KeyConversationMembers(params.ConversationID.String()))
+	if err := apiConfig.Cache.Delete(r.Context(), cache.KeyConversationMembers(params.ConversationID.String())); err != nil {
+		log.Printf("Failed to invalidate conversation members cache: %v", err)
+	}
 
 	respondWithJSON(w, 200, model.APIResponse{
 		Success: true,
@@ -340,7 +346,9 @@ func (apiConfig *apiConfig) handlerSetRole(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	apiConfig.Cache.Delete(r.Context(), cache.KeyConversationMembers(params.ConversationID.String()))
+	if err := apiConfig.Cache.Delete(r.Context(), cache.KeyConversationMembers(params.ConversationID.String())); err != nil {
+		log.Printf("Failed to invalidate conversation members cache: %v", err)
+	}
 
 	respondWithJSON(w, 200, model.APIResponse{
 		Success: true,
@@ -406,7 +414,9 @@ func (apiConfig *apiConfig) handlerTransferOwnership(w http.ResponseWriter, r *h
 		respondWithJSON(w, 500, model.APIResponse{Success: false, Message: "Failed to promote new super admin"})
 		return
 	}
-	apiConfig.Cache.Delete(r.Context(), cache.KeyConversationMembers(params.ConversationID.String()))
+	if err := apiConfig.Cache.Delete(r.Context(), cache.KeyConversationMembers(params.ConversationID.String())); err != nil {
+		log.Printf("Failed to invalidate conversation members cache: %v", err)
+	}
 	respondWithJSON(w, 200, model.APIResponse{
 		Success: true,
 		Message: "Ownership transferred successfully",
@@ -463,7 +473,9 @@ func (apiConfig *apiConfig) handlerRenameGroup(w http.ResponseWriter, r *http.Re
 		respondWithJSON(w, 500, model.APIResponse{Success: false, Message: "Failed to rename group"})
 		return
 	}
-	apiConfig.Cache.DeleteByPattern(r.Context(), fmt.Sprintf("conversations:list:%s:*", userID.String()))
+	if err := apiConfig.Cache.DeleteByPattern(r.Context(), fmt.Sprintf("conversations:list:%s:*", userID.String())); err != nil {
+		log.Printf("Failed to invalidate conversations cache: %v", err)
+	}
 	respondWithJSON(w, 200, model.APIResponse{
 		Success: true,
 		Message: "Group renamed successfully",
@@ -873,7 +885,9 @@ func (apiConfig *apiConfig) handlerDeleteConversation(w http.ResponseWriter, r *
 		ConversationID: &params.ConversationID,
 		SenderID:       &userID,
 	})
-	apiConfig.Cache.DeleteByPattern(r.Context(), fmt.Sprintf("conversations:list:%s:*", userID.String()))
+	if err := apiConfig.Cache.DeleteByPattern(r.Context(), fmt.Sprintf("conversations:list:%s:*", userID.String())); err != nil {
+		log.Printf("Failed to invalidate conversations cache: %v", err)
+	}
 	respondWithJSON(w, 200, model.APIResponse{
 		Success: true,
 		Message: "Conversation deleted successfully",

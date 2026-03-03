@@ -265,7 +265,9 @@ func (apiConfig *apiConfig) handlerUpdateUser(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	apiConfig.Cache.Delete(r.Context(), cache.KeyUserProfile(userID.String()))
+	if err := apiConfig.Cache.Delete(r.Context(), cache.KeyUserProfile(userID.String())); err != nil {
+		log.Println("Cache.Delete error:", err)
+	}
 
 	respondWithJSON(w, 200, model.APIResponse{
 		Success: true,
