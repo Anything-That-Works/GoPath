@@ -13,6 +13,8 @@ import (
 
 	"github.com/Anything-That-Works/GoPath/internal/cache"
 	"github.com/Anything-That-Works/GoPath/internal/database"
+	"github.com/Anything-That-Works/GoPath/internal/handler"
+	"github.com/Anything-That-Works/GoPath/internal/model"
 	"github.com/Anything-That-Works/GoPath/internal/storage"
 	"github.com/Anything-That-Works/GoPath/internal/ws"
 	"github.com/go-chi/chi/v5"
@@ -20,15 +22,6 @@ import (
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
-
-type apiConfig struct {
-	DB           *database.Queries
-	JWTSecretKey []byte
-	Storage      storage.FileStorage
-	Hub          *ws.Hub
-	TrustedProxy string
-	Cache        cache.Cache
-}
 
 func requireEnv(key string) string {
 	val := os.Getenv(key)
@@ -84,7 +77,7 @@ func main() {
 	hub := ws.NewHub()
 	go hub.Run()
 
-	apiCfg := apiConfig{
+	apiConfig := model.ApiConfig{
 		DB:           database.New(con),
 		JWTSecretKey: []byte(jwtSecretKey),
 		Storage:      storage.NewLocalStorage(uploadsPath, baseURL),
@@ -92,8 +85,8 @@ func main() {
 		TrustedProxy: trustedProxy,
 		Cache:        redisCache,
 	}
-
-	msgHandler := ws.NewMessageHandler(hub, apiCfg.DB, apiCfg.Storage)
+	h := handler.New(&apiConfig)
+	msgHandler := ws.NewMessageHandler(hub, h.ApiConfig.DB, h.ApiConfig.Storage)
 
 	router := chi.NewRouter()
 
@@ -106,7 +99,7 @@ func main() {
 		MaxAge:           300,
 	}))
 
-	router.Use(middlewareRateLimit)
+	router.Use(handler.MiddlewareRateLimit)
 
 	// security headers
 	router.Use(func(next http.Handler) http.Handler {
@@ -146,42 +139,42 @@ func main() {
 
 	v1Router := chi.NewRouter()
 
-	v1Router.Get("/healthz", handlerReadiness)
-	v1Router.Get("/error", handlerError)
+	v1Router.Get("/healthz", handler.HandlerReadiness)
+	v1Router.Get("/error", handler.HandlerError)
 
 	// routes with 1MB body limit and write timeout
 	v1Router.Group(func(r chi.Router) {
 		r.Use(limitMiddleware)
 		r.Use(writeTimeoutMiddleware)
 
-		r.Post("/user", apiCfg.handlerCreateUser)
-		r.Post("/user/login", apiCfg.handlerLogin)
-		r.Post("/user/lookup", apiCfg.handlerLookupUser)
-		r.Post("/user/exists", apiCfg.handlerEmailExists)
-		r.Put("/user", apiCfg.middlewareAuth(apiCfg.handlerUpdateUser))
-		r.Get("/user/me", apiCfg.middlewareAuth(apiCfg.handlerGetProfile))
-		r.Post("/user/refresh", apiCfg.handlerRefreshToken)
-		r.Post("/user/logout", apiCfg.middlewareAuth(apiCfg.handlerLogout))
-		r.Post("/user/logout-all", apiCfg.middlewareAuth(apiCfg.handlerLogoutAll))
+		r.Post("/user", h.HandlerCreateUser)
+		r.Post("/user/login", h.HandlerLogin)
+		r.Post("/user/lookup", h.HandlerLookupUser)
+		r.Post("/user/exists", h.HandlerEmailExists)
+		r.Put("/user", h.MiddlewareAuth(h.HandlerUpdateUser))
+		r.Get("/user/me", h.MiddlewareAuth(h.HandlerGetProfile))
+		r.Post("/user/refresh", h.HandlerRefreshToken)
+		r.Post("/user/logout", h.MiddlewareAuth(h.HandlerLogout))
+		r.Post("/user/logout-all", h.MiddlewareAuth(h.HandlerLogoutAll))
 
-		r.Post("/conversations/create", apiCfg.middlewareAuth(apiCfg.handlerCreateConversation))
-		r.Post("/conversations", apiCfg.middlewareAuth(apiCfg.handlerGetConversations))
-		r.Post("/conversations/members", apiCfg.middlewareAuth(apiCfg.handlerGetConversationMembers))
-		r.Post("/conversations/members/add", apiCfg.middlewareAuth(apiCfg.handlerAddMember))
-		r.Post("/conversations/members/remove", apiCfg.middlewareAuth(apiCfg.handlerRemoveMember))
-		r.Post("/conversations/members/role", apiCfg.middlewareAuth(apiCfg.handlerSetRole))
-		r.Post("/conversations/transfer-ownership", apiCfg.middlewareAuth(apiCfg.handlerTransferOwnership))
-		r.Put("/conversations/name", apiCfg.middlewareAuth(apiCfg.handlerRenameGroup))
-		r.Post("/conversations/messages", apiCfg.middlewareAuth(apiCfg.handlerGetMessages))
-		r.Post("/conversations/messages/search", apiCfg.middlewareAuth(apiCfg.handlerSearchMessages))
-		r.Post("/conversations/online", apiCfg.middlewareAuth(apiCfg.handlerGetOnlineMembers))
-		r.Delete("/conversations", apiCfg.middlewareAuth(apiCfg.handlerDeleteConversation))
+		r.Post("/conversations/create", h.MiddlewareAuth(h.HandlerCreateConversation))
+		r.Post("/conversations", h.MiddlewareAuth(h.HandlerGetConversations))
+		r.Post("/conversations/members", h.MiddlewareAuth(h.HandlerGetConversationMembers))
+		r.Post("/conversations/members/add", h.MiddlewareAuth(h.HandlerAddMember))
+		r.Post("/conversations/members/remove", h.MiddlewareAuth(h.HandlerRemoveMember))
+		r.Post("/conversations/members/role", h.MiddlewareAuth(h.HandlerSetRole))
+		r.Post("/conversations/transfer-ownership", h.MiddlewareAuth(h.HandlerTransferOwnership))
+		r.Put("/conversations/name", h.MiddlewareAuth(h.HandlerRenameGroup))
+		r.Post("/conversations/messages", h.MiddlewareAuth(h.HandlerGetMessages))
+		r.Post("/conversations/messages/search", h.MiddlewareAuth(h.HandlerSearchMessages))
+		r.Post("/conversations/online", h.MiddlewareAuth(h.HandlerGetOnlineMembers))
+		r.Delete("/conversations", h.MiddlewareAuth(h.HandlerDeleteConversation))
 	})
 
 	// routes without body limit
-	v1Router.Post("/files", apiCfg.middlewareAuth(apiCfg.handlerUploadFile))
-	v1Router.Get("/files/{filename}", apiCfg.middlewareAuth(apiCfg.handlerServeFile))
-	v1Router.Get("/ws", apiCfg.handlerWebSocket(hub, msgHandler))
+	v1Router.Post("/files", h.MiddlewareAuth(h.HandlerUploadFile))
+	v1Router.Get("/files/{filename}", h.MiddlewareAuth(h.HandlerServeFile))
+	v1Router.Get("/ws", h.HandlerWebSocket(hub, msgHandler))
 
 	router.Mount("/v1", v1Router)
 
