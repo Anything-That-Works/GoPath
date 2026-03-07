@@ -3,8 +3,6 @@ services:
     build: .
     env_file:
       - .env
-    ports:
-      - "${PORT}:${PORT}"
     environment:
       - PORT=${PORT}
       - DB_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
@@ -23,7 +21,7 @@ services:
       migrate:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:${PORT}/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:${PORT}/v1/healthz || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -70,15 +68,18 @@ services:
       db:
         condition: service_healthy
 
-  pgadmin:
-    image: dpage/pgadmin4
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+  nginx:
+    image: nginx:alpine
     ports:
-      - "5050:80"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./nginx/certs:/etc/nginx/certs
     depends_on:
-      - db
+      app:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   postgres_data:
